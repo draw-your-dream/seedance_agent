@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>秃秃动画Prompt评审</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #0f0f0f; color: #e0e0e0; }
+
+  header { padding: 32px 40px 24px; border-bottom: 1px solid #222; }
+  header h1 { font-size: 24px; font-weight: 600; color: #fff; }
+  header p { font-size: 14px; color: #888; margin-top: 6px; }
+
+  /* 流程图折叠区 */
+  .pipeline-toggle { padding: 14px 40px; background: #131313; border-bottom: 1px solid #222; cursor: pointer; display: flex; align-items: center; gap: 8px; user-select: none; }
+  .pipeline-toggle:hover { background: #1a1a1a; }
+  .pipeline-toggle .arrow { font-size: 12px; color: #666; transition: transform 0.2s; }
+  .pipeline-toggle .arrow.open { transform: rotate(90deg); }
+  .pipeline-toggle span { font-size: 13px; color: #888; }
+
+  .pipeline-panel { max-height: 0; overflow: hidden; transition: max-height 0.4s ease; background: #111; border-bottom: 1px solid #222; }
+  .pipeline-panel.open { max-height: 600px; }
+  .pipeline-content { padding: 32px 40px 28px; }
+
+  /* 主流程横排 */
+  .flow-main { display: flex; align-items: flex-start; gap: 0; overflow-x: auto; }
+  .flow-node { display: flex; flex-direction: column; align-items: center; min-width: 88px; }
+  .flow-icon { width: 48px; height: 48px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; letter-spacing: -0.5px; }
+  .flow-icon.auto { background: rgba(99,102,241,0.15); border: 1.5px solid #6366f1; color: #c7d2fe; }
+  .flow-icon.human { background: rgba(251,191,36,0.15); border: 1.5px solid #fbbf24; color: #fde68a; }
+  .flow-name { font-size: 13px; color: #ddd; margin-top: 8px; font-weight: 500; }
+  .flow-tag { font-size: 10px; color: #666; margin-top: 3px; }
+  .flow-arrow { color: #444; font-size: 20px; margin: 12px 4px 0; }
+
+  /* ②③的分叉子节点 */
+  .flow-branch { display: flex; flex-direction: column; align-items: center; min-width: 130px; }
+  .flow-branch .flow-icon { margin-bottom: 8px; }
+  .flow-branch-files { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; max-width: 160px; margin-top: 4px; }
+  .flow-branch-files .ftag { font-size: 10px; color: #999; background: #1c1c1c; border: 1px solid #2a2a2a; padding: 2px 7px; border-radius: 4px; white-space: nowrap; }
+  .flow-branch-connector { width: 1px; height: 10px; background: #333; }
+
+  /* 底部反馈线 */
+  .flow-feedback { display: flex; align-items: center; gap: 10px; margin-top: 20px; padding-top: 14px; border-top: 1px dashed #222; }
+  .flow-feedback .fb-text { font-size: 11px; color: #666; white-space: nowrap; }
+  .flow-feedback .fb-line { height: 1px; flex: 1; background: linear-gradient(90deg, rgba(99,102,241,0.4), transparent); }
+
+  .stats-bar { display: flex; gap: 24px; padding: 16px 40px; background: #161616; border-bottom: 1px solid #222; font-size: 13px; color: #aaa; position: sticky; top: 0; z-index: 10; }
+  .stats-bar .stat { display: flex; align-items: center; gap: 6px; }
+  .stats-bar .dot { width: 8px; height: 8px; border-radius: 50%; }
+  .stats-bar .dot.total { background: #555; }
+  .stats-bar .dot.good { background: #34d399; }
+  .stats-bar .dot.bad { background: #f87171; }
+  .stats-bar .dot.pending { background: #fbbf24; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 32px 40px; }
+
+  .card { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; margin-bottom: 28px; overflow: hidden; transition: border-color 0.2s; }
+  .card:hover { border-color: #3a3a3a; }
+  .card.good-selected { border-color: #34d399; }
+  .card.bad-selected { border-color: #f87171; }
+
+  .card-header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #2a2a2a; }
+  .card-header .title { font-size: 16px; font-weight: 600; color: #fff; }
+  .card-header .badge { font-size: 11px; padding: 3px 10px; border-radius: 20px; background: #2a2a2a; color: #aaa; }
+
+  .card-body { display: grid; grid-template-columns: 500px 1fr; gap: 0; }
+  @media (max-width: 960px) { .card-body { grid-template-columns: 1fr; } }
+
+  .video-col { background: #111; display: flex; align-items: center; justify-content: center; padding: 20px; min-height: 680px; }
+  .video-col video { width: 100%; max-height: 780px; border-radius: 8px; object-fit: contain; background: #000; }
+
+  .info-col { padding: 20px; display: flex; flex-direction: column; gap: 16px; }
+
+  .prompt-section { flex: 1; overflow: hidden; }
+  .prompt-section label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; display: block; }
+  .prompt-text { font-size: 12px; line-height: 1.6; color: #ccc; max-height: 260px; overflow-y: auto; padding: 10px; background: #111; border-radius: 8px; border: 1px solid #222; white-space: pre-wrap; word-break: break-all; }
+  .prompt-text::-webkit-scrollbar { width: 4px; }
+  .prompt-text::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+
+  .review-section { border-top: 1px solid #2a2a2a; padding-top: 16px; }
+  .review-section label { font-size: 12px; color: #888; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: block; }
+
+  .btn-group { display: flex; gap: 10px; }
+  .btn { padding: 8px 20px; border-radius: 8px; border: 1.5px solid #333; background: transparent; color: #aaa; font-size: 13px; font-weight: 500; cursor: pointer; transition: all 0.15s; display: flex; align-items: center; gap: 6px; }
+  .btn:hover { border-color: #555; color: #fff; }
+  .btn.good-active { border-color: #34d399; background: rgba(52,211,153,0.1); color: #34d399; }
+  .btn.bad-active { border-color: #f87171; background: rgba(248,113,113,0.1); color: #f87171; }
+  .btn .icon { font-size: 15px; }
+
+  .bad-reason { margin-top: 12px; display: none; }
+  .bad-reason.show { display: block; }
+  .bad-reason textarea { width: 100%; height: 72px; background: #111; border: 1px solid #333; border-radius: 8px; color: #e0e0e0; padding: 10px 12px; font-size: 13px; font-family: inherit; resize: vertical; outline: none; transition: border-color 0.15s; }
+  .bad-reason textarea:focus { border-color: #f87171; }
+  .bad-reason textarea::placeholder { color: #555; }
+
+  .actions-bar { position: sticky; bottom: 0; background: #111; border-top: 1px solid #2a2a2a; padding: 16px 40px; display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+  .export-btn { padding: 10px 28px; border-radius: 8px; border: none; background: #fff; color: #000; font-size: 14px; font-weight: 600; cursor: pointer; transition: opacity 0.15s; }
+  .export-btn:hover { opacity: 0.85; }
+  .actions-info { font-size: 13px; color: #666; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🍄 秃秃动画Prompt评审面板</h1>
+  <p>查看视频生成结果，标记 Good Case / Bad Case，导出评审记录 · 倒序排列（最新在前）</p>
+</header>
+
+<div class="pipeline-toggle" onclick="togglePipeline()">
+  <span class="arrow" id="pipeline-arrow">&#9654;</span>
+  <span>生成流程</span>
+</div>
+<div class="pipeline-panel" id="pipeline-panel">
+  <div class="pipeline-content">
+    <div class="flow-main">
+
+      <div class="flow-node">
+        <div class="flow-icon auto">①</div>
+        <div class="flow-name">选题</div>
+        <div class="flow-tag">LLM</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-branch">
+        <div class="flow-icon auto">②</div>
+        <div class="flow-name">写Prompt</div>
+        <div class="flow-tag">LLM + 规则文件</div>
+        <div class="flow-branch-connector"></div>
+        <div class="flow-branch-files">
+          <span class="ftag" title="注入LLM作为System Prompt，定义角色设定、禁止项、表情系统">ip-constitution → 角色规则</span>
+          <span class="ftag" title="提供6类场景的结构骨架和变量槽位">category-templates → 结构骨架</span>
+          <span class="ftag" title="场景/物品/音效/运镜等可选元素池，供LLM组合选取">variable-banks → 创意元素池</span>
+          <span class="ftag" title="历史Good Case的完整prompt，作为few-shot范例注入">examples-library → 参考范例</span>
+          <span class="ftag" title="组合以上所有内容的主指令，直接喂给LLM生成prompt">meta-prompt → 生成指令</span>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-branch">
+        <div class="flow-icon auto">③</div>
+        <div class="flow-name">校验</div>
+        <div class="flow-tag">seedance_pipeline.py</div>
+        <div class="flow-branch-connector"></div>
+        <div class="flow-branch-files">
+          <span class="ftag">quality-checklist</span>
+          <span class="ftag">不通过→回②修正</span>
+        </div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-node">
+        <div class="flow-icon auto">④</div>
+        <div class="flow-name">提交</div>
+        <div class="flow-tag">Seedance API</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-node">
+        <div class="flow-icon auto">⑤</div>
+        <div class="flow-name">下载</div>
+        <div class="flow-tag">自动</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-node">
+        <div class="flow-icon auto">⑥</div>
+        <div class="flow-name">上架</div>
+        <div class="flow-tag">Review页</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-node">
+        <div class="flow-icon human">⑦</div>
+        <div class="flow-name">评审</div>
+        <div class="flow-tag">人工</div>
+      </div>
+      <div class="flow-arrow">→</div>
+
+      <div class="flow-node">
+        <div class="flow-icon auto">⑧</div>
+        <div class="flow-name">学习</div>
+        <div class="flow-tag">反馈闭环</div>
+      </div>
+
+    </div>
+    <div class="flow-feedback">
+      <div class="fb-text">⑧ Bad → 避免清单 · Good → 范例库，自动注入 ①② 下一轮更优</div>
+      <div class="fb-line"></div>
+      <div class="fb-text">↩ 闭环回①</div>
+    </div>
+  </div>
+</div>
+
+<div class="stats-bar">
+  <div class="stat"><span class="dot total"></span><span id="stat-total">0</span> 总计</div>
+  <div class="stat"><span class="dot good"></span><span id="stat-good">0</span> Good</div>
+  <div class="stat"><span class="dot bad"></span><span id="stat-bad">0</span> Bad</div>
+  <div class="stat"><span class="dot pending"></span><span id="stat-pending">0</span> 待评审</div>
+</div>
+
+<div class="container" id="cards-container"></div>
+
+<div class="actions-bar">
+  <div class="actions-info">评审结果保存在浏览器本地，刷新不丢失</div>
+  <button class="export-btn" onclick="exportResults()">导出评审结果 JSON</button>
+</div>
+
+<script>
+// ============================================================
+// 数据：按编号正序定义，渲染时倒序
+// ============================================================
+const items = [
+  {
+    id: "01", title: "01 | 秃秃吃提拉米苏", batch: "Batch 1",
+    video: "videos/01_秃秃吃提拉米苏.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景，角色不要太大不要超过画面三分之一。场景：暖黄色灯光下的原木色桌面，桌上放着一个透明方形玻璃杯装的提拉米苏，旁边散落几颗咖啡豆。微距浅景深，背景虚化可见暖色室内环境。
+
+0-3s：蘑菇角色站在提拉米苏杯子旁边，杯子比它高出半个头。踮起脚趴在杯沿往里看——五层深浅交替。歪头左看右看打量，鼻子凑近闻了一下，眼睛睁大身体轻轻一颤。
+
+3-6s：拿起银色小勺子从顶层插到最底层挖起来，勺子上五层分明。歪头端详一下整勺塞进去。腮帮子猛地鼓起来闭眼——瞳孔放大出现星星高光，腮帮子duangduang快速弹动。
+
+6-10s：第三口直接把脸探进杯口——蘑菇帽卡住了，duang duang挤两下，啵一声整个菇挤进杯子里，蘑菇帽沾满可可粉变深棕色。
+
+10-13s：人类的手把蘑菇角色从杯子里捏起来，四肢无力下垂，满足地眯起眼对着镜头歪头眨眼。画面定格。`
+  },
+  {
+    id: "02", title: "02 | 秃秃第一次认识闹钟", batch: "Batch 1",
+    video: "videos/02_秃秃第一次认识闹钟.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：清晨卧室床头柜上，复古金属小闹钟，闹钟和蘑菇角色差不多高。
+
+0-3s：蘑菇角色蜷在闹钟旁边熟睡。突然闹钟铃响了！蘑菇角色被震得弹离闹钟啪叽摔在柜面上。
+
+3-7s：蘑菇角色爬起来，两只小短手抱住闹钟顶部想按停，整个身体被闹钟带着duangduangduang上下颠。
+
+7-10s：找到按钮用整个身体重量一压——咔哒铃声停了。趴在闹钟顶上大口喘气。
+
+10-13s：靠着闹钟坐下保持安全距离，看向镜头表情又困又委屈。打了个哈欠，终于又靠在闹钟上睡着了。画面定格。`
+  },
+  {
+    id: "03", title: "03 | 秃秃vs电动牙刷", batch: "Batch 1",
+    video: "videos/03_秃秃vs电动牙刷.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：浴室白色洗手台台面，电动牙刷竖立在充电座上。
+
+0-3s：人把牙刷放回充电座还开着嗡嗡震动。蘑菇角色伸出小短手碰了一下——手被震得缩回来duangduang抖了几下。
+
+3-7s：两只小短手抱住牙刷杆——整个身体剧烈震动，脸蛋的肉duangduangduang抖成波浪状。牙刷被拉歪倒在台面上带着蘑菇角色转了一个半圈。
+
+7-10s：仰面躺在台面上眼睛变成两个螺旋圈圈，整个菇还在抖。
+
+10-13s：找到按钮按停牙刷，虽然还在微微晃但挺起胸膛，颤颤巍巍竖起大拇指。画面定格。`
+  },
+  {
+    id: "04", title: "04 | 秃秃奶茶店员", batch: "Batch 1",
+    video: "videos/04_秃秃奶茶店员.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：微缩奶茶操作台，蘑菇角色穿迷你围裙，帽子贴着"店长"纸条。
+
+0-3s：人类的手点一杯。蘑菇角色严肃点头，搓手准备。
+
+3-8s：抱着珍珠罐子倒珍珠，倒茶底，倒牛奶形成三色分层。叉腰审视成品满意点头。
+
+8-11s：扛着比自己还高的吸管插进杯盖，推杯子推不动脸涨红。
+
+11-15s：悄悄绕到杯子侧面吸了一口奶茶，腮帮子鼓成两个圆球。被人类敲台面发现，鼓着腮对镜头歪头眨眼。画面定格。`
+  },
+  {
+    id: "05", title: "05 | 秃秃给你做早餐", batch: "Batch 1",
+    video: "videos/05_秃秃给你做早餐.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：清晨厨房，POV视角=观众的眼睛。
+
+0-3s：蘑菇角色发现你醒了眼睛亮起来弹了一下，挥手打招呼。
+
+3-7s：抱黄油搬到吐司上涂开。抱草莓酱罐子拧盖子——拧不开整个菇跟着罐子转了一圈，第三次终于啵一声拧开。
+
+7-10s：挖草莓酱涂在黄油层上形成红金渐变。退后端详满意点头。
+
+10-15s：两只小短手推盘子和牛奶杯往你面前推，脸涨红使劲。推到后温柔地嘟了一声，害羞拉帽子盖住半张脸偷偷看你。画面定格。`
+  },
+  {
+    id: "06", title: "06 | 清晨 · 秃秃赖床", batch: "Batch 2 · 秃秃的一天",
+    video: "videos/06_秃秃赖床.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：清晨窗台边，化妆棉当床垫，纸巾当被子。
+
+0-3s：蘑菇角色裹着纸巾被子熟睡。晨光移到脸上，伸小短手挡住翻身继续睡。
+
+3-7s：微风把纸巾被子吹走了，摸索着够被子——够不到。两只小短手捂住脸，像不情愿的卷饼被强行摊平。
+
+7-10s：终于睁开眼坐起来，蘑菇帽歪着有睡痕。打了个巨大的哈欠差点又倒回去。
+
+10-13s：走到窗台边缘，阳光照出毛绒身体金色光晕。伸懒腰，转头看镜头微笑，轻轻嘟了一声像说早安。画面定格。`
+  },
+  {
+    id: "07", title: "07 | 上午 · 秃秃坐纽扣滑板", batch: "Batch 2 · 秃秃的一天",
+    video: "videos/07_秃秃坐纽扣滑板.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：客厅木质地板，一颗大号圆形纽扣。
+
+0-3s：蘑菇角色踩到纽扣脚下一滑。低头发现纽扣能在地板上滑动，眼中闪过亮光。
+
+3-7s：双脚站上纽扣蹬地滑行越来越快，张开小短手像冲浪，划出S形轨迹。
+
+7-10s：刹不住撞上桌腿，被惯性甩出去翻了半圈啪叽趴地，蘑菇帽飞出去。
+
+10-13s：光秃秃的头顶摸了摸，赶紧捡帽子扣回去。看向镜头露出意犹未尽的笑。画面定格。`
+  },
+  {
+    id: "08", title: "08 | 中午 · 秃秃水龙头洗澡", batch: "Batch 2 · 秃秃的一天",
+    video: "videos/08_秃秃水龙头洗澡.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：厨房水槽边，水龙头关着，瓷碟子当小平台。
+
+0-3s：蘑菇帽热得耷拉。跳起来够水龙头把手拧开，细水流滴下来。
+
+3-7s：水滴在蘑菇帽顶顺着帽沿像小水帘。从惊讶变成舒服，在水流下转圈圈，水花四溅。
+
+7-10s：瓷碟太滑脚一滑啪叽坐下，水花溅一圈。吹了口把脸上水吹开，甩蘑菇帽水珠像小喷泉。
+
+10-13s：索性坐在水流下享受，脸朝上闭眼。睁开眼甩蘑菇帽朝镜头飞水珠，咧嘴笑。画面定格。`
+  },
+  {
+    id: "09", title: "09 | 下午 · 秃秃和瓢虫晒太阳", batch: "Batch 2 · 秃秃的一天",
+    video: "videos/09_秃秃和瓢虫晒太阳.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：阳台花盆边绿叶上，午后金色阳光。
+
+0-3s：蘑菇角色四肢摊开躺在大叶子上晒太阳。一只小瓢虫从叶子边缘爬上来。
+
+3-7s：凑近瓢虫端详——红底黑点。低头看自己蘑菇帽——红底白点。眼睛亮起来。
+
+7-10s：学瓢虫趴下来只露圆圆蘑菇帽，一大一小两个红色圆壳在绿叶上缓慢移动。
+
+10-13s：瓢虫飞走了，挥手告别。重新躺回叶子上，侧头看镜头懒洋洋嘟了一声。画面定格。`
+  },
+  {
+    id: "10", title: "10 | 夜晚 · 秃秃钻进袜子睡觉", batch: "Batch 2 · 秃秃的一天",
+    video: "videos/10_秃秃钻进袜子睡觉.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：夜晚卧室地板，小夜灯光线，一只白色棉袜。POV=你躺在床上往下看。
+
+0-3s：蘑菇角色从床脚阴影走出来眼皮耷拉摇摇晃晃。踩到棉袜歪头打量。
+
+3-7s：拉开袜口往里看，抬头看你露出小得意。腿先伸进去——蘑菇帽卡了一下duang duang挤两下，啵一声滑进去。棉袜鼓起蘑菇形状。
+
+7-10s：袜子里翻身，凸起左鼓右鼓。袜口慢慢探出半张脸，棉布搭在鼻子位置像被子。
+
+10-13s：亮晶晶的眼睛看着你，困到眼皮勉强撑开。从棉布里闷闷传出极轻的嘟像说晚安。眼睛闭上，小脸缩回袜子。画面缓缓变暗定格。`
+  },
+  {
+    id: "11", title: "11 | 秃秃荡秋千", batch: "Batch 3",
+    video: "videos/11_秃秃荡秋千.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：户外花园，树枝上纽扣做的迷你秋千。
+
+0-3s：小蘑菇坐在纽扣秋千上，小短腿悬空，身体轻轻前后晃动，小短手紧抓细线有点紧张。
+
+3-7s：开始用力荡越来越高，蘑菇帽被风吹得往后飘，毛绒身体逆光泛起金色光晕。荡到最高点身体微微腾空又落回来duang弹了一下。
+
+7-10s：闭上眼张开小短手松开绳子，最高点整个身体悬在空中像在飞。重力拉回纽扣上，睁开眼笑了。
+
+10-13s：秋千减速，侧头看向镜头，蘑菇帽上落了一片花瓣。歪头眨了一下眼。画面定格。`
+  },
+  {
+    id: "12", title: "12 | 秃秃踩水坑", batch: "Batch 3",
+    video: "videos/12_秃秃踩水坑.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：雨后阳台地面小水坑，水面倒映蓝天白云。
+
+0-3s：站在水坑边缘看倒影。小心翼翼伸出一只小短腿点了一下水面——涟漪荡开，倒影碎成波纹，眼睛亮了。
+
+3-7s：走进水坑蹦跳踩水，每跳一下水花溅起来跟它一样高，蘑菇帽沾满水珠亮晶晶，越跳越开心。
+
+7-10s：跳太猛一脚踩滑，啪叽坐进水坑里水花炸开。蘑菇帽被水浇得往下塌，水糊了一脸。愣了一秒。
+
+10-13s：抹了把脸上的水，甩蘑菇帽水珠甩出去。坐在水坑里抬头看镜头笑了，腮帮子鼓鼓的很满足。画面定格。`
+  },
+  {
+    id: "13", title: "13 | 秃秃被风吹", batch: "Batch 3",
+    video: "videos/13_秃秃被风吹.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：窗台上，窗户半开，白色薄窗帘飘动。
+
+0-3s：站在窗台上微风拂过蘑菇帽，舒服地闭眼享受。
+
+3-7s：突然大风灌进来，被吹得身体后仰，小短手拼命抓窗台边缘，蘑菇帽差点飞走。整个身体被风吹得双腿离地水平飘起来像一面小旗帜。
+
+7-10s：风减弱身体慢慢落回窗台，趴着喘气，蘑菇帽歪了，使劲按回去。
+
+10-13s：风停了窗帘安静垂下。坐在窗台上看镜头表情又委屈又庆幸，抱紧花盆边缘不松手。画面定格。`
+  },
+  {
+    id: "14", title: "14 | 秃秃照镜子", batch: "Batch 3",
+    video: "videos/14_秃秃照镜子.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：浴室台面上圆形小化妆镜，镜子跟小蘑菇差不多高。
+
+0-3s：走到镜子前看到倒影——吓了一跳往后跳一步蘑菇帽弹了一下。小心凑近发现是自己，歪头，镜子里也歪头。
+
+3-7s：对着镜子做表情。鼓腮帮子、眯眼笑、把蘑菇帽拉下盖住脸再掀开——跟镜子里的自己玩躲猫猫。
+
+7-10s：鼻尖贴到镜面，整个脸贴上镜面蹭了蹭，脸蛋被压得微微变形duang弹回来。
+
+10-13s：退后一步，对镜子整了整蘑菇帽，挺胸站直对镜子点头很满意。转头对镜头也挺胸点头。画面定格。`
+  },
+  {
+    id: "15", title: "15 | 秃秃搬草莓", batch: "Batch 3",
+    video: "videos/15_秃秃搬草莓.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：厨房桌面上一颗鲜红色大草莓，比小蘑菇整个身体还大。
+
+0-3s：站在草莓旁边仰头看，眼睛出现星星高光。绕着草莓走了一圈打量。
+
+3-7s：抱住草莓正面使劲推——纹丝不动。换侧面拉——不动。退后助跑整个身体撞上去——草莓没动自己被弹回来duang坐在桌面上。
+
+7-10s：转到草莓背后用背顶，小短腿使劲蹬。草莓终于滚动——越滚越快跟不上，被带着摔了个趴。草莓滚到远处停住。
+
+10-13s：趴在桌面上望着远处的草莓腮帮子撅起来。慢慢爬起来拍拍灰，迈着小碎步又朝草莓走过去，表情倔强不服输。画面定格。`
+  },
+  {
+    id: "16", title: "16 | 秃秃和露珠", batch: "Batch 4 · 秃秃的一天v2",
+    video: "videos/16_秃秃和露珠.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：清晨草地上，草叶上挂满晶莹露珠，每颗比蘑菇角色眼睛还大，晨光折射彩虹光斑。
+
+0-3s：蘑菇角色站在草叶旁，一颗巨大露珠挂在草叶尖端，露珠里倒映着蘑菇角色变形放大的脸。凑近盯着看歪头，被逗乐了嘴角翘起来。
+
+3-7s：小心翼翼双手托住露珠取下来，露珠在手心颤颤巍巍比脸还大。举到面前端详，露珠折射的彩虹光映在脸上，眼睛出现星星高光。
+
+7-10s：蘑菇帽边缘一滴水滴下来滴到露珠上——啵，露珠破了水全泼在脸上。愣在原地手还保持着捧的姿势。
+
+10-13s：发现旁边草叶上还有好多好多露珠亮闪闪的，嘴角又翘起来。转头看镜头湿漉漉的脸上带着释然微笑。画面定格。`
+  },
+  {
+    id: "17", title: "17 | 秃秃坐瓶盖旋转", batch: "Batch 4 · 秃秃的一天v2",
+    video: "videos/17_秃秃坐瓶盖旋转.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：客厅茶几光滑玻璃面上，一个倒扣的白色塑料瓶盖。
+
+0-3s：推了一下瓶盖在玻璃面上滑出去，追过去又推又滑。第三次双手按住，爬进去坐下——瓶盖像小圆盆刚好坐进去。
+
+3-7s：用小短手拨玻璃面，瓶盖开始旋转越转越快。蘑菇帽被离心力带得外飘，从新奇变成有点晕但很开心。
+
+7-10s：转速减下来停住了。坐在里面身体还在微微晃，眼睛转成小漩涡。试着站起来又坐回去，闭眼等了一秒恢复。
+
+10-13s：站稳后走了两步还有点歪，回头看瓶盖眼睛亮了——快步走回去又坐进去准备再来。画面定格。`
+  },
+  {
+    id: "18", title: "18 | 秃秃吹蒲公英", batch: "Batch 4 · 秃秃的一天v2",
+    video: "videos/18_秃秃吹蒲公英.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：阳台花盆边，一株白色蒲公英绒球比蘑菇帽还大。中午明亮阳光。
+
+0-3s：仰头看蒲公英绒球在阳光下发光像巨大毛球。凑近绒球，一根细丝飘下来落在鼻尖，打了个小喷嚏身体一缩。
+
+3-7s：深吸一口气腮帮子鼓成大圆球，使劲吹——只吹掉几根。又鼓更大脸涨红再吹——吹掉一大片，白色绒丝在阳光中飘散像小降落伞。
+
+7-10s：最后一口全力吹散——吹太猛自己被推了一步坐在花盆边缘。绒丝漫天飞像微型下雪，几根落在蘑菇帽上和白色波点混在一起。
+
+10-13s：伸出小短手，一根绒丝飘落到手心。抬头看镜头眼睛亮亮的，轻轻吹一下送上天空。画面定格。`
+  },
+  {
+    id: "19", title: "19 | 秃秃和音乐盒", batch: "Batch 4 · 秃秃的一天v2",
+    video: "videos/19_秃秃和音乐盒.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：卧室窗台上小巧木质八音盒，盒盖打开里面有旋转小人偶。午后暖黄阳光。
+
+0-3s：发现八音盒侧面旋钮，两只小短手抱住拧了几圈——叮咚响起来小人偶旋转。眼睛睁大盯着看。
+
+3-7s：跟着旋律左右摇晃，原地转小圈圈模仿小人偶。小短手举到头顶做芭蕾姿势——手太短帽太大很不标准但很认真。踮脚单腿站——duang倒了爬起来再试。
+
+7-10s：八音盒旋律渐慢——发条快完了。叮……咚……间隔越来越长。舞步也慢下来，音乐停了也定在原地。
+
+10-13s：赶紧跑到八音盒旁又拧旋钮，重新叮咚响起来。在八音盒前跟小人偶面对面一起转，转着看向镜头笑了。画面定格。`
+  },
+  {
+    id: "20", title: "20 | 秃秃和萤火虫", batch: "Batch 4 · 秃秃的一天v2",
+    video: "videos/20_秃秃和萤火虫.mp4",
+    prompt: `图片1是小蘑菇角色形象参考。微缩场景，小蘑菇只有4cm高，构图中近景。场景：夜晚阳台栏杆边，深蓝色夜空，植物叶子间几只萤火虫黄绿色微光一闪一闪。
+
+0-3s：蘑菇角色站在阳台角落，一只萤火虫飞近光一明一灭。歪头跟着光点转动脑袋。萤火虫停在面前光亮了——脸被照亮眼睛映着黄绿色光。
+
+3-7s：伸小短手想接住——飞开了。追两步再伸手——又飞开，这次飞到蘑菇帽顶上停着。感觉头顶亮了抬眼往上看，轻轻转头不敢大动怕吓跑。
+
+7-10s：更多萤火虫飞过来围着缓缓飞舞，黄绿色光环绕着它映在蘑菇帽红色表面上。慢慢张开小短手让萤火虫在周围飞，脸上安静笑容。
+
+10-13s：轻轻合拢双手——一只萤火虫停在手心里，黄绿色光从手缝透出来像捧着小星星。抬头看镜头眼睛有星星高光，轻轻张开手萤火虫飞走。画面定格在被萤火虫环绕的夜色剪影。`
+  }
+];
+
+// ============================================================
+// 渲染时倒序
+// ============================================================
+const STORAGE_KEY = "tutu_review_v2";
+
+function loadState() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveState(state) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+
+let reviewState = loadState();
+
+function render() {
+  const container = document.getElementById("cards-container");
+  container.innerHTML = "";
+
+  // 倒序渲染
+  const reversed = [...items].reverse();
+
+  reversed.forEach(item => {
+    const s = reviewState[item.id] || {};
+    const verdict = s.verdict || "";
+    const reason = s.reason || "";
+
+    const card = document.createElement("div");
+    card.className = `card ${verdict === "good" ? "good-selected" : verdict === "bad" ? "bad-selected" : ""}`;
+    card.innerHTML = `
+      <div class="card-header">
+        <span class="title">${item.title}</span>
+        <span class="badge">${item.batch}</span>
+      </div>
+      <div class="card-body">
+        <div class="video-col">
+          <video controls preload="metadata" playsinline>
+            <source src="${item.video}" type="video/mp4">
+          </video>
+        </div>
+        <div class="info-col">
+          <div class="prompt-section">
+            <label>Seedance Prompt</label>
+            <div class="prompt-text">${item.prompt}</div>
+          </div>
+          <div class="review-section">
+            <label>评审</label>
+            <div class="btn-group">
+              <button class="btn ${verdict === 'good' ? 'good-active' : ''}" onclick="setVerdict('${item.id}', 'good')">
+                <span class="icon">✓</span> Good Case
+              </button>
+              <button class="btn ${verdict === 'bad' ? 'bad-active' : ''}" onclick="setVerdict('${item.id}', 'bad')">
+                <span class="icon">✗</span> Bad Case
+              </button>
+            </div>
+            <div class="bad-reason ${verdict === 'bad' ? 'show' : ''}" id="reason-${item.id}">
+              <textarea placeholder="哪里不好？（如：角色变形 / 动作不对 / 场景错误 / 比例失调 / 出现其他角色…）"
+                        oninput="setReason('${item.id}', this.value)">${reason}</textarea>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    container.appendChild(card);
+  });
+
+  updateStats();
+}
+
+function setVerdict(id, verdict) {
+  if (!reviewState[id]) reviewState[id] = {};
+  if (reviewState[id].verdict === verdict) {
+    reviewState[id].verdict = "";
+  } else {
+    reviewState[id].verdict = verdict;
+  }
+  if (verdict !== "bad") reviewState[id].reason = "";
+  saveState(reviewState);
+  render();
+}
+
+function setReason(id, reason) {
+  if (!reviewState[id]) reviewState[id] = {};
+  reviewState[id].reason = reason;
+  saveState(reviewState);
+  updateStats();
+}
+
+function updateStats() {
+  let good = 0, bad = 0, pending = 0;
+  items.forEach(item => {
+    const v = (reviewState[item.id] || {}).verdict;
+    if (v === "good") good++;
+    else if (v === "bad") bad++;
+    else pending++;
+  });
+  document.getElementById("stat-total").textContent = items.length;
+  document.getElementById("stat-good").textContent = good;
+  document.getElementById("stat-bad").textContent = bad;
+  document.getElementById("stat-pending").textContent = pending;
+}
+
+function exportResults() {
+  const results = items.map(item => {
+    const s = reviewState[item.id] || {};
+    return {
+      id: item.id, title: item.title, batch: item.batch,
+      verdict: s.verdict || "pending",
+      bad_reason: s.reason || "",
+      prompt: item.prompt
+    };
+  });
+  const blob = new Blob([JSON.stringify(results, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `tutu_review_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function togglePipeline() {
+  document.getElementById("pipeline-panel").classList.toggle("open");
+  document.getElementById("pipeline-arrow").classList.toggle("open");
+}
+
+render();
+</script>
+</body>
+</html>

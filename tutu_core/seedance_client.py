@@ -1,0 +1,148 @@
+# -*- coding: utf-8 -*-
+"""Seedance视频生成API客户端 — 统一提交/查询/下载逻辑"""
+
+import json
+import base64
+import logging
+from pathlib import Path
+
+import httpx
+
+# 共享客户端：连接池复用
+_http_client = httpx.Client(timeout=120, follow_redirects=True)
+
+from tutu_core.config import (
+    get_ark_api_key, SEEDANCE_API_URL, SEEDANCE_MODEL,
+    SEEDANCE_DURATION, SEEDANCE_RATIO,
+    REF_IMAGE, REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
+)
+
+logger = logging.getLogger("tutu.seedance")
+
+
+def load_reference_image(path: Path = None) -> str:
+    """加载参考图片为base64字符串。"""
+    img_path = path or REF_IMAGE
+    if not img_path.exists():
+        raise FileNotFoundError(f"参考图片不存在: {img_path}")
+    with open(img_path, "rb") as f:
+        img_b64 = base64.b64encode(f.read()).decode()
+    logger.info(f"参考图片已加载: {img_path} ({len(img_b64)} chars)")
+    return img_b64
+
+
+def build_payload(prompt_text: str, img_b64: str, duration: int = None) -> dict:
+    """构建Seedance API payload。"""
+    return {
+        "model": SEEDANCE_MODEL,
+        "content": [
+            {"type": "text", "text": prompt_text},
+            {
+                "type": "image_url",
+                "image_url": {"url": f"data:image/png;base64,{img_b64}"},
+                "role": "reference_image"
+            }
+        ],
+        "generate_audio": True,
+        "ratio": SEEDANCE_RATIO,
+        "duration": duration or SEEDANCE_DURATION,
+        "watermark": False
+    }
+
+
+def verify_payload(payload: dict) -> list[str]:
+    """
+    验证payload内容完整性。
+    Batch 2教训：payload生成脚本bug导致text为空，Seedance自由发挥生成无关视频。
+    """
+    errors = []
+    content = payload.get("content", [])
+    text = content[0].get("text", "") if content else ""
+    if len(text) < PROMPT_MIN_LENGTH:
+        errors.append(f"payload text太短: {len(text)}字")
+    if not text.startswith(REQUIRED_PREFIX):
+        errors.append(f"payload text未以'{REQUIRED_PREFIX}'开头")
+    has_image = (
+        len(content) > 1
+        and "base64" in str(content[1].get("image_url", {}).get("url", ""))[:50]
+    )
+    if not has_image:
+        errors.append("payload缺少参考图片")
+    return errors
+
+
+def submit_task(prompt_text: str, img_b64: str,
+                duration: int = None, payload_tag: str = "") -> tuple[str | None, str | None]:
+    """
+    构建payload、验证并提交到Seedance API。
+    返回 (task_id, error_message)。
+    """
+    api_key = get_ark_api_key()
+    payload = build_payload(prompt_text, img_b64, duration)
+
+    # 提交前验证
+    errors = verify_payload(payload)
+    if errors:
+        return None, "; ".join(errors)
+
+    # 序列化回读验证（Batch 2血泪教训：确保JSON序列化不丢内容）
+    serialized = json.dumps(payload, ensure_ascii=False)
+    check = json.loads(serialized)
+    check_text = check["content"][0]["text"]
+    if len(check_text) < PROMPT_MIN_LENGTH:
+        return None, f"回读验证失败: text仅{len(check_text)}字"
+
+    try:
+        resp = _http_client.post(
+            SEEDANCE_API_URL,
+            headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
+            content=serialized.encode("utf-8"),
+        )
+        data = resp.json()
+        if "id" in data:
+            return data["id"], None
+        elif "error" in data:
+            err = data["error"]
+            return None, f"{err.get('code', 'unknown')}: {err.get('message', '')[:80]}"
+        else:
+            return None, f"未知响应: {json.dumps(data)[:80]}"
+    except httpx.TimeoutException:
+        return None, "提交超时(120s)"
+    except Exception as e:
+        return None, str(e)
+
+
+def query_task(task_id: str) -> dict:
+    """查询单个任务状态。"""
+    api_key = get_ark_api_key()
+    try:
+        resp = _http_client.get(
+            f"{SEEDANCE_API_URL}/{task_id}",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=30,
+        )
+        return resp.json()
+    except httpx.TimeoutException:
+        return {"status": "error", "error": "查询超时"}
+    except Exception as e:
+        return {"status": "error", "error": str(e)}
+
+
+def download_video(url: str, filepath) -> tuple[bool, str]:
+    """下载视频文件（流式写入）。返回 (success, message)。"""
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with _http_client.stream("GET", url) as resp:
+            resp.raise_for_status()
+            with open(filepath, "wb") as f:
+                for chunk in resp.iter_bytes(chunk_size=65536):
+                    f.write(chunk)
+        if filepath.exists() and filepath.stat().st_size > 10000:
+            size_mb = filepath.stat().st_size / (1024 * 1024)
+            return True, f"{size_mb:.1f}MB"
+        return False, "文件太小或下载失败"
+    except httpx.TimeoutException:
+        return False, "下载超时(120s)"
+    except Exception as e:
+        return False, str(e)

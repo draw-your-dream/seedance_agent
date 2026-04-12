@@ -1,0 +1,69 @@
+[
+  {
+    "date": "04/09", "weekday": "周三",
+    "slots": [
+      {"time":"10:30","period":"上午","weather":"⛅","title":"坐纽扣当滑板","video":"07_秃秃坐纽扣滑板.mp4",
+       "thoughts":[{"time":"10:33","text":"滑起来了！好快好快！"}]},
+      {"time":"08:00","period":"早晨","weather":"🌥️","title":"给你做早餐","video":"05_秃秃给你做早餐.mp4",
+       "thoughts":[{"time":"08:05","text":"今天给小薯条做早餐！"},{"time":"08:02","text":"虽然我只会做草……草也很好吃的"}]}
+    ]
+  },
+  {
+    "date": "04/08", "weekday": "周二",
+    "slots": [
+      {"time":"21:00","period":"夜晚","weather":"🌙","title":"和萤火虫","video":"20_秃秃和萤火虫.mp4",
+       "thoughts":[{"time":"21:05","text":"一闪一闪像小星星"},{"time":"21:03","text":"有一只停在帽子上了！"}]},
+      {"time":"18:30","period":"傍晚","weather":"🌅","title":"假装奶茶店员","video":"04_秃秃奶茶店员.mp4",
+       "thoughts":[{"time":"18:33","text":"欢迎光临嘟嘟奶茶"},{"time":"18:31","text":"不知道奶茶什么味道，看起来好忙"}]},
+      {"time":"14:00","period":"下午","weather":"🌤️","title":"偷吃提拉米苏","video":"01_秃秃吃提拉米苏.mp4",
+       "thoughts":[{"time":"14:03","text":"这个褐色粉粉是什么"},{"time":"14:02","text":"嘴里有点苦又有点甜"},{"time":"14:01","text":"人类食物好复杂"}]},
+      {"time":"10:00","period":"上午","weather":"⛅","title":"和瓢虫晒太阳","video":"09_秃秃和瓢虫晒太阳.mp4",
+       "thoughts":[{"time":"10:05","text":"它帽子颜色跟我好像，我们是不是亲戚"}]},
+      {"time":"07:30","period":"早晨","weather":"☀️","title":"水龙头下洗澡","video":"08_秃秃水龙头洗澡.mp4",
+       "thoughts":[{"time":"07:33","text":"水好大差点被冲走"}]}
+    ]
+  },
+  {
+    "date": "04/07", "weekday": "周一",
+    "slots": [
+      {"time":"21:00","period":"夜晚","weather":"🌙","title":"钻进袜子睡觉","video":"10_秃秃钻进袜子睡觉.mp4",
+       "thoughts":[{"time":"21:03","text":"软软的像睡袋"},{"time":"21:01","text":"明天也要元气满满"}]},
+      {"time":"17:00","period":"傍晚","weather":"🌅","title":"被风吹","video":"13_秃秃被风吹.mp4",
+       "thoughts":[{"time":"17:03","text":"站不住了！帽子要飞了！"}]},
+      {"time":"14:00","period":"下午","weather":"🌤️","title":"搬了一颗大草莓","video":"15_秃秃搬草莓.mp4",
+       "thoughts":[{"time":"14:05","text":"比我还大！闻起来好甜"},{"time":"14:02","text":"但是我搬不动"}]},
+      {"time":"10:00","period":"上午","weather":"🌥️","title":"被电动牙刷吓到","video":"03_秃秃vs电动牙刷.mp4",
+       "thoughts":[{"time":"10:03","text":"这个东西会动会抖！好可怕！"}]},
+      {"time":"07:30","period":"早晨","weather":"🌥️","title":"赖床不想起","video":"06_秃秃赖床.mp4",
+       "thoughts":[{"time":"07:35","text":"再躺五分钟……被子好暖"},{"time":"07:32","text":"手太短够不到闹钟"}]}
+    ]
+  },
+  {
+    "date": "04/06", "weekday": "周日",
+    "slots": [
+      {"time":"21:30","period":"夜晚","weather":"🌙","title":"跟着音乐盒跳舞","video":"19_秃秃和音乐盒.mp4",
+       "thoughts":[{"time":"21:33","text":"这个旋律好好听，转圈圈♪"}]},
+      {"time":"18:00","period":"傍晚","weather":"🌅","title":"荡秋千","video":"11_秃秃荡秋千.mp4",
+       "thoughts":[{"time":"18:03","text":"荡到最高能看好远的地方"}]},
+      {"time":"16:00","period":"下午","weather":"⛅","title":"踩水坑","video":"12_秃秃踩水坑.mp4",
+       "thoughts":[{"time":"16:03","text":"噗叽！水花溅脸上了哈哈哈"}]},
+      {"time":"14:00","period":"下午","weather":"🌤️","title":"吹蒲公英","video":"18_秃秃吹蒲公英.mp4",
+       "thoughts":[{"time":"14:05","text":"吹一口全飞了"},{"time":"14:03","text":"像小降落伞飘向天空"}]},
+      {"time":"10:00","period":"上午","weather":"⛅","title":"坐瓶盖旋转","video":"17_秃秃坐瓶盖旋转.mp4",
+       "thoughts":[{"time":"10:03","text":"转起来了！头好晕但是好开心"}]},
+      {"time":"07:30","period":"早晨","weather":"☀️","title":"和露珠玩","video":"16_秃秃和露珠.mp4",
+       "thoughts":[{"time":"07:35","text":"这个水球好圆好亮"},{"time":"07:33","text":"碰一下……啊破了"}]},
+      {"time":"07:00","period":"早晨","weather":"☀️","title":"照镜子","video":"14_秃秃照镜子.mp4",
+       "thoughts":[{"time":"07:05","text":"里面也有一个我"},{"time":"07:02","text":"嘿嘿好可爱（是在说我自己）"}]}
+    ]
+  },
+  {
+    "date": "04/05", "weekday": "周六",
+    "slots": [
+      {"time":"20:00","period":"夜晚","weather":"🌙","title":"第一次认识闹钟","video":"02_秃秃第一次认识闹钟.mp4",
+       "thoughts":[{"time":"20:05","text":"这个圆盘会叫！"},{"time":"20:03","text":"明天它会叫我起床吗"}]},
+      {"time":"15:00","period":"下午","weather":"🌤️","title":"赖床不想起","video":"06_秃秃赖床.mp4",
+       "thoughts":[{"time":"15:03","text":"午觉也要赖一下"}]}
+    ]
+  }
+]

@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>秃秃的一天</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    font-family: -apple-system, 'PingFang SC', 'Helvetica Neue', sans-serif;
+    background: #000;
+    display: flex;
+    justify-content: center;
+    min-height: 100vh;
+  }
+
+  .phone {
+    width: 393px;
+    min-height: 100vh;
+    background: #0a0a0a;
+    position: relative;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  /* Status bar */
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px 8px;
+    color: #fff;
+    font-size: 15px;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    background: rgba(10,10,10,0.9);
+    backdrop-filter: blur(20px);
+    z-index: 100;
+  }
+
+  /* Date header */
+  .date-header {
+    padding: 16px 24px 8px;
+    color: rgba(255,255,255,0.5);
+    font-size: 13px;
+  }
+
+  /* Timeline */
+  .timeline {
+    padding: 0 0 100px;
+  }
+
+  /* Card */
+  .card {
+    margin: 16px 16px;
+    border-radius: 20px;
+    overflow: hidden;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+  }
+
+  .card-header {
+    padding: 16px 20px 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+
+  .card-header-left h2 {
+    color: #fff;
+    font-size: 20px;
+    font-weight: 700;
+    margin-bottom: 2px;
+  }
+
+  .card-header-left .subtitle {
+    color: rgba(255,255,255,0.4);
+    font-size: 12px;
+  }
+
+  .card-header-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .weather {
+    font-size: 22px;
+  }
+
+  .time-badge {
+    background: rgba(255,255,255,0.1);
+    color: rgba(255,255,255,0.7);
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: 12px;
+  }
+
+  /* Video */
+  .video-container {
+    width: 100%;
+    position: relative;
+    background: #111;
+  }
+
+  .video-container video {
+    width: 100%;
+    display: block;
+  }
+
+  .video-label {
+    position: absolute;
+    bottom: 12px;
+    left: 12px;
+    background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(10px);
+    color: #fff;
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 10px;
+  }
+
+  /* Thoughts */
+  .thoughts {
+    padding: 16px 20px;
+  }
+
+  .thoughts-title {
+    color: rgba(255,255,255,0.4);
+    font-size: 12px;
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+  }
+
+  .thought-item {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 12px;
+    align-items: flex-start;
+  }
+
+  .thought-time {
+    color: rgba(255,255,255,0.3);
+    font-size: 12px;
+    min-width: 40px;
+    padding-top: 2px;
+  }
+
+  .thought-bubble {
+    background: rgba(255,255,255,0.08);
+    border-radius: 14px;
+    padding: 10px 14px;
+    color: rgba(255,255,255,0.85);
+    font-size: 14px;
+    line-height: 1.6;
+    flex: 1;
+  }
+
+  /* Bottom bar */
+  .bottom-bar {
+    position: fixed;
+    bottom: 0;
+    width: 393px;
+    padding: 12px 16px 28px;
+    background: rgba(10,10,10,0.95);
+    backdrop-filter: blur(20px);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    border-top: 1px solid rgba(255,255,255,0.06);
+    z-index: 100;
+  }
+
+  .msg-btn {
+    flex: 1;
+    background: rgba(255,255,255,0.08);
+    border: none;
+    border-radius: 24px;
+    padding: 14px 20px;
+    color: rgba(255,255,255,0.5);
+    font-size: 14px;
+    text-align: left;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .msg-btn .dot {
+    width: 8px;
+    height: 8px;
+    background: #ff6b6b;
+    border-radius: 50%;
+    animation: pulse 2s infinite;
+  }
+
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .camera-btn {
+    width: 48px;
+    height: 48px;
+    background: rgba(255,255,255,0.1);
+    border: none;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+  }
+
+  /* Period separator */
+  .period-sep {
+    text-align: center;
+    padding: 20px 0 4px;
+    color: rgba(255,255,255,0.2);
+    font-size: 11px;
+    letter-spacing: 3px;
+  }
+
+  /* Typing animation for latest thought */
+  .typing .thought-bubble {
+    border-left: 2px solid rgba(255,255,255,0.3);
+  }
+
+  /* Scroll indicator */
+  .scroll-hint {
+    text-align: center;
+    padding: 16px;
+    color: rgba(255,255,255,0.15);
+    font-size: 12px;
+  }
+
+  /* Story arc badge */
+  .arc-badge {
+    display: inline-block;
+    background: linear-gradient(135deg, rgba(255,107,107,0.2), rgba(255,159,67,0.2));
+    border: 1px solid rgba(255,107,107,0.3);
+    color: rgba(255,255,255,0.7);
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 10px;
+    margin: 8px 24px;
+  }
+</style>
+</head>
+<body>
+
+<div class="phone">
+  <!-- Status Bar -->
+  <div class="status-bar">
+    <span>9:41</span>
+    <span style="font-size:11px; opacity:0.5;">● ● ●</span>
+    <span style="font-size:13px;">📶 🔋</span>
+  </div>
+
+  <!-- Date & Arc -->
+  <div class="date-header">4月9日 · 周三 · 上海 · 多云转晴 22°C</div>
+  <div class="arc-badge">🍄 探索人类世界 · 第3天</div>
+
+  <div class="timeline">
+
+    <!-- 早晨 -->
+    <div class="period-sep">· · · 早 晨 · · ·</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <h2>赖在床上不想起来</h2>
+          <div class="subtitle">小蘑菇秃秃</div>
+        </div>
+        <div class="card-header-right">
+          <span class="time-badge">07:30</span>
+          <span class="weather">🌥️</span>
+        </div>
+      </div>
+      <div class="video-container">
+        <video src="../videos/06_秃秃赖床.mp4" playsinline muted loop onclick="this.paused?this.play():this.pause()"></video>
+        <div class="video-label">📍 卧室 · 被窝里</div>
+      </div>
+      <div class="thoughts">
+        <div class="thoughts-title">菇 的 碎 碎 念</div>
+        <div class="thought-item">
+          <span class="thought-time">07:35</span>
+          <div class="thought-bubble">不想起来……被子好暖和……再躺五分钟</div>
+        </div>
+        <div class="thought-item">
+          <span class="thought-time">07:32</span>
+          <div class="thought-bubble">闹钟好吵，但是我的手太短够不到它</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 上午 -->
+    <div class="period-sep">· · · 上 午 · · ·</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <h2>在阳台晒太阳</h2>
+          <div class="subtitle">小蘑菇秃秃</div>
+        </div>
+        <div class="card-header-right">
+          <span class="time-badge">10:00</span>
+          <span class="weather">⛅</span>
+        </div>
+      </div>
+      <div class="video-container">
+        <video src="../videos/09_秃秃和瓢虫晒太阳.mp4" playsinline muted loop onclick="this.paused?this.play():this.pause()"></video>
+        <div class="video-label">📍 阳台 · 和瓢虫一起</div>
+      </div>
+      <div class="thoughts">
+        <div class="thoughts-title">菇 的 碎 碎 念</div>
+        <div class="thought-item">
+          <span class="thought-time">10:10</span>
+          <div class="thought-bubble">这只红色的小虫子跟我的帽子颜色好像！我们是一伙的吧</div>
+        </div>
+        <div class="thought-item">
+          <span class="thought-time">10:05</span>
+          <div class="thought-bubble">小薯条之前发了沙滩照……沙滩上晒太阳应该更舒服吧，可是我不会游泳</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 下午 -->
+    <div class="period-sep">· · · 下 午 · · ·</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <h2>搬了一颗大草莓</h2>
+          <div class="subtitle">小蘑菇秃秃</div>
+        </div>
+        <div class="card-header-right">
+          <span class="time-badge">14:00</span>
+          <span class="weather">🌤️</span>
+        </div>
+      </div>
+      <div class="video-container">
+        <video src="../videos/15_秃秃搬草莓.mp4" playsinline muted loop onclick="this.paused?this.play():this.pause()"></video>
+        <div class="video-label">📍 厨房边 · 发现宝藏</div>
+      </div>
+      <div class="thoughts">
+        <div class="thoughts-title">菇 的 碎 碎 念</div>
+        <div class="thought-item">
+          <span class="thought-time">14:10</span>
+          <div class="thought-bubble">这个红色圆圆的东西好大！闻起来好甜！比草好吃吗？</div>
+        </div>
+        <div class="thought-item">
+          <span class="thought-time">14:05</span>
+          <div class="thought-bubble">上次有人问我要不要吃鱼……鱼我不敢吃，但是这个看起来不会动，应该安全</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 傍晚 -->
+    <div class="period-sep">· · · 傍 晚 · · ·</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <h2>在花园荡秋千</h2>
+          <div class="subtitle">小蘑菇秃秃</div>
+        </div>
+        <div class="card-header-right">
+          <span class="time-badge">18:30</span>
+          <span class="weather">🌅</span>
+        </div>
+      </div>
+      <div class="video-container">
+        <video src="../videos/11_秃秃荡秋千.mp4" playsinline muted loop onclick="this.paused?this.play():this.pause()"></video>
+        <div class="video-label">📍 花园 · 越荡越高</div>
+      </div>
+      <div class="thoughts">
+        <div class="thoughts-title">菇 的 碎 碎 念</div>
+        <div class="thought-item">
+          <span class="thought-time">18:40</span>
+          <div class="thought-bubble">荡到最高的时候可以看到好远的地方！有没有看到海？小薯条说的那个沙滩在哪里</div>
+        </div>
+        <div class="thought-item">
+          <span class="thought-time">18:35</span>
+          <div class="thought-bubble">风吹到脸上凉凉的，帽子差点飞走，吓死我了</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 夜晚 -->
+    <div class="period-sep">· · · 夜 晚 · · ·</div>
+    <div class="card">
+      <div class="card-header">
+        <div class="card-header-left">
+          <h2>在阳台看萤火虫</h2>
+          <div class="subtitle">小蘑菇秃秃</div>
+        </div>
+        <div class="card-header-right">
+          <span class="time-badge">21:30</span>
+          <span class="weather">🌙</span>
+        </div>
+      </div>
+      <div class="video-container">
+        <video src="../videos/20_秃秃和萤火虫.mp4" playsinline muted loop onclick="this.paused?this.play():this.pause()"></video>
+        <div class="video-label">📍 阳台 · 像小星星</div>
+      </div>
+      <div class="thoughts">
+        <div class="thoughts-title">菇 的 碎 碎 念</div>
+        <div class="thought-item">
+          <span class="thought-time">21:40</span>
+          <div class="thought-bubble">它们一闪一闪的好好看……像帽子上的白点发了光</div>
+        </div>
+        <div class="thought-item typing">
+          <span class="thought-time">21:35</span>
+          <div class="thought-bubble">今天搬了草莓、荡了秋千，还认识了一只跟我撞色的小虫子。好充实的一天。小薯条今天还好吗</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="scroll-hint">— 秃秃的一天 · 4月9日 —</div>
+
+  </div>
+
+  <!-- Bottom Bar -->
+  <div class="bottom-bar">
+    <button class="msg-btn">
+      <span class="dot"></span>
+      秃秃发了一条消息给你
+    </button>
+    <button class="camera-btn">📷</button>
+  </div>
+</div>
+
+<script>
+  // Auto-play videos when they scroll into view
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const video = entry.target;
+      if (entry.isIntersecting) {
+        video.play().catch(() => {});
+      } else {
+        video.pause();
+      }
+    });
+  }, { threshold: 0.5 });
+
+  document.querySelectorAll('video').forEach(v => observer.observe(v));
+</script>
+
+</body>
+</html>

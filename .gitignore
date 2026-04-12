@@ -1,0 +1,15 @@
+# 环境变量（包含API密钥，禁止提交）
+.env
+
+# 数据库
+*.db
+
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+
+# 临时文件
+/tmp/
