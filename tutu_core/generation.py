@@ -49,7 +49,8 @@ CATEGORY_KEYWORDS = {
     "美食吃播": ["吃", "品尝", "尝", "偷吃", "大快朵颐", "试吃", "啃", "舔"],
     "日常生活": ["赖床", "起床", "洗澡", "睡觉", "打扫", "晒太阳", "发呆", "等", "躲", "藏"],
     "第一次认识": ["第一次", "认识", "发现", "好奇", "研究", "打量", "什么东西"],
-    "户外主题": ["户外", "公园", "花", "树", "雨", "雪", "海", "湖", "山", "风", "江南", "樱花", "散步"],
+    "户外主题": ["户外", "公园", "花", "树", "雨", "雪", "海", "湖", "山", "风", "江南", "樱花", "散步",
+                 "晒太阳", "秋千", "水坑", "草地", "沙滩", "星星", "月亮", "野餐", "蝴蝶", "瓢虫"],
     "职业扮演": ["扮演", "工作", "店员", "师", "员", "摊", "卖", "开店", "打工"],
 }
 
@@ -182,49 +183,66 @@ def quality_review(prompt_text: str, category: str) -> tuple[bool, list[str]]:
     """
     快速质量审查（本地，不调用 LLM）。
     返回 (passed, issues)。issues 是需要改进的具体建议列表。
+
+    阈值经过 examples-library.md 中7个标杆范例校准。
     """
     import re
     issues = []
 
-    # 时间码检查
-    timecodes = re.findall(r'\d+-\d+s', prompt_text)
-    if len(timecodes) < 3:
-        issues.append("时间码不足：只有{}段，建议4段（0-3s/3-7s/7-10s/10-13s）".format(len(timecodes)))
+    # 时间码检查 — 匹配多种写法：0-3s / 0-2s：/ 镜1（0-3s）/ 第一段
+    timecodes = re.findall(r'\d+-\d+s|镜\d|镜头\d|第[一二三四五六]段', prompt_text)
+    if len(timecodes) < 2:
+        issues.append("分段不足：只有{}段标记，建议至少3-4段分镜".format(len(timecodes)))
 
-    # 音效密度检查
-    sound_words = ["音效", "声", "duang", "啪", "咔", "嘎", "噗", "叮", "咕", "滋", "嘟", "boing", "啵"]
+    # 音效密度检查 — 包含拟声词和音效描述动词
+    sound_words = [
+        "音效", "声", "duang", "啪", "咔", "嘎", "噗", "叮", "咕", "滋",
+        "嘟", "boing", "啵", "沙沙", "咚", "嗖", "吱", "哗", "噔",
+        "清脆", "沉闷", "轻响", "碎响", "叮当",
+    ]
     sound_count = sum(prompt_text.count(w) for w in sound_words)
-    if sound_count < 4:
-        issues.append("音效描写不够密集（只有{}处，建议每段时间码至少1个具体音效）".format(sound_count))
+    if sound_count < 2:
+        issues.append("音效描写不够（只有{}处，建议每段都有具体音效/拟声词）".format(sound_count))
 
-    # 表情密度检查
-    expr_count = sum(prompt_text.count(w) for w in _EXPRESSION_WORDS)
-    if expr_count < 3:
-        issues.append("表情描写太少（只有{}处，建议每个动作节拍都有表情变化）".format(expr_count))
+    # 表情/动作密度检查 — 扩大关键词范围
+    expr_words = [
+        "眼睛", "腮帮", "嘴", "帽子", "表情", "眯", "鼓", "歪头", "愣", "笑",
+        "红", "脸蛋", "瞪", "撅", "缩", "抱", "叉腰", "竖", "捂",
+        "点头", "摇头", "哈欠", "眨眼", "嘴角",
+    ]
+    expr_count = sum(prompt_text.count(w) for w in expr_words)
+    if expr_count < 2:
+        issues.append("表情/动作描写太少（只有{}处，建议有表情或肢体细节）".format(expr_count))
 
-    # 互动 beat 检查
-    has_interaction = any(w in prompt_text for w in _INTERACTION_WORDS)
+    # 互动 beat 检查 — 扩大匹配范围
+    interaction_words = [
+        "镜头", "看向", "递向", "推向", "挥手", "眨眼", "定格", "望向",
+        "蹭了蹭", "安心", "满足", "对着", "看着", "靠着",
+    ]
+    has_interaction = any(w in prompt_text for w in interaction_words)
     if not has_interaction:
-        issues.append("缺少互动beat：结尾应有望向镜头/递给镜头/挥手等互动")
+        issues.append("缺少互动/情感收尾：结尾应有情感表达或与镜头互动")
 
-    # 构图约束检查
-    if "不要太大" not in prompt_text and "三分之一" not in prompt_text:
-        issues.append("缺少构图约束：应注明角色不要太大/不超过画面三分之一")
+    # 构图约束检查 — 匹配更多变体
+    composition_words = ["不要太大", "三分之一", "不要太小", "中景", "中近景", "对称构图"]
+    has_composition = any(w in prompt_text for w in composition_words)
+    if not has_composition:
+        issues.append("缺少构图约束：应注明景别或角色大小限制")
 
     # 类别特定检查
     if category in ("美食制作", "美食吃播"):
         color_words = ["红", "白", "粉", "黄", "金", "绿", "紫", "褐", "焦", "淡", "深", "浅"]
-        color_count = sum(prompt_text.count(w) for w in color_words)
-        if color_count < 3:
-            issues.append("食物颜色描写不足（只有{}种颜色词，建议至少3层颜色描写）".format(color_count))
+        color_count = sum(1 for w in color_words if w in prompt_text)
+        if color_count < 2:
+            issues.append("食物颜色描写不足（只有{}种颜色词，建议至少3层颜色）".format(color_count))
 
     if category == "美食吃播":
         if "腮帮" not in prompt_text:
             issues.append("吃播类缺少腮帮子描写（duangduang弹动是核心画面）")
 
-    # 字数检查
-    if len(prompt_text) < 400:
-        issues.append("prompt偏短（{}字），建议500-700字以获得更丰富的画面".format(len(prompt_text)))
+    # 字数检查 — 标杆范例最短约200字（摊煎饼的单段），放宽到300
+    if len(prompt_text) < 300:
+        issues.append("prompt偏短（{}字），建议至少300字".format(len(prompt_text)))
 
     passed = len(issues) <= 1  # 允许最多1个非关键问题
     return passed, issues
