@@ -34,6 +34,8 @@ from datetime import datetime
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tutu_core.validators import quick_validate
+from tutu_core.llm_client import call_llm as core_call_llm
+from tutu_core.generation import quality_review, classify_event
 
 # ============================================================
 # 配置
@@ -125,63 +127,11 @@ def get_example_for_category(category: str) -> str:
 # ============================================================
 
 def call_llm(system_prompt: str, user_prompt: str, max_tokens: int = 8000) -> str:
-    """统一的LLM调用接口，支持Claude和OpenAI"""
-    provider = os.environ.get("LLM_PROVIDER", "claude").lower()
-
-    if provider == "claude":
-        return call_claude(system_prompt, user_prompt, max_tokens)
-    elif provider == "openai":
-        return call_openai(system_prompt, user_prompt, max_tokens)
-    else:
-        raise ValueError(f"不支持的LLM提供商: {provider}，请使用 claude 或 openai")
-
-
-def call_claude(system_prompt: str, user_prompt: str, max_tokens: int = 8000) -> str:
-    """调用 Claude API"""
-    try:
-        import anthropic
-    except ImportError:
-        print("请安装 anthropic SDK: pip install anthropic")
-        sys.exit(1)
-
-    api_key = os.environ.get("ANTHROPIC_API_KEY")
-    if not api_key:
-        print("请设置环境变量 ANTHROPIC_API_KEY")
-        sys.exit(1)
-
-    client = anthropic.Anthropic(api_key=api_key)
-    message = client.messages.create(
-        model="claude-sonnet-4-20250514",
-        max_tokens=max_tokens,
-        system=system_prompt,
-        messages=[{"role": "user", "content": user_prompt}],
-    )
-    return message.content[0].text
-
-
-def call_openai(system_prompt: str, user_prompt: str, max_tokens: int = 8000) -> str:
-    """调用 OpenAI API"""
-    try:
-        from openai import OpenAI
-    except ImportError:
-        print("请安装 openai SDK: pip install openai")
-        sys.exit(1)
-
-    api_key = os.environ.get("OPENAI_API_KEY")
-    if not api_key:
-        print("请设置环境变量 OPENAI_API_KEY")
-        sys.exit(1)
-
-    client = OpenAI(api_key=api_key)
-    response = client.chat.completions.create(
-        model="gpt-4o",
-        max_tokens=max_tokens,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt},
-        ],
-    )
-    return response.choices[0].message.content
+    """统一 LLM 调用，委托给 tutu_core.llm_client（支持 Gemini/ARK/Claude/OpenAI）"""
+    result = core_call_llm(system_prompt, user_prompt, max_tokens=max_tokens, use_cache=False)
+    if result is None:
+        raise RuntimeError("LLM 调用失败，请检查 API 配置")
+    return result
 
 
 # ============================================================
@@ -473,13 +423,20 @@ def cmd_expand(args):
         if not prompt_text:
             continue
 
-        # 快速校验
+        # 质量校验（使用 generation 模块的增强版）
+        cat = classify_event(theme, entry.get("concept", ""))
+        qr_passed, qr_issues = quality_review(prompt_text, cat)
+        # 同时跑旧的 quick_validate 保持向后兼容
         validation = quick_validate(prompt_text)
-        status = "✅" if validation["passed"] else f"⚠({len(validation['issues'])}项)"
-        print(f"  [{idx:2d}] {theme} — {status}")
-        if not validation["passed"]:
-            for issue in validation["issues"]:
+        all_issues = qr_issues + [i for i in validation.get("issues", []) if i not in qr_issues]
+        combined_passed = qr_passed and validation["passed"]
+        status = "✅" if combined_passed else f"⚠({len(all_issues)}项)"
+        print(f"  [{idx:2d}] {theme} [{cat}] — {status}")
+        if not combined_passed:
+            for issue in all_issues:
                 print(f"       ❌ {issue}")
+        validation["passed"] = combined_passed
+        validation["issues"] = all_issues
 
         # 保存单个prompt
         safe_name = theme.replace("/", "_").replace(" ", "_")

@@ -97,6 +97,7 @@ def submit_task(prompt_text: str, img_b64: str,
             SEEDANCE_API_URL,
             headers={"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"},
             content=serialized.encode("utf-8"),
+            timeout=300,  # 大 payload（含 base64 图片 ~2MB），需要更长超时
         )
         data = resp.json()
         if "id" in data:

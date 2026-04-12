@@ -111,39 +111,60 @@ function switchTab(name) {
 }
 
 // ============================================================
-// Feed
+// Feed（懒加载 + 分页 + 滚动播放）
 // ============================================================
 let feedLoading = false;
-let feedEvents = [];
+let feedHasMore = true;
+let feedLastPublishAt = null;
+let feedObserver = null;     // 播放控制
+let feedLazyObserver = null; // 懒加载控制
+let currentPlaying = null;
 
-async function loadFeed() {
+async function loadFeed(append = false) {
   if (feedLoading) return;
+  if (append && !feedHasMore) return;
   feedLoading = true;
   try {
-    const resp = await fetch('/api/feed?limit=20');
+    let url = '/api/feed?limit=8';
+    if (append && feedLastPublishAt) url += '&before=' + encodeURIComponent(feedLastPublishAt);
+    const resp = await fetch(url);
     const data = await resp.json();
-    feedEvents = data.events || [];
-    renderFeed();
+    const events = data.events || [];
+    feedHasMore = data.has_more;
+    if (events.length) feedLastPublishAt = events[events.length - 1].publish_at;
+    renderFeed(events, append);
   } catch(e) { console.error(e); }
   feedLoading = false;
 }
 
-function renderFeed() {
+function renderFeed(events, append) {
   const container = document.getElementById('feed-scroll');
-  if (!feedEvents.length) {
+  if (!append && !events.length) {
     container.innerHTML = '<div class="feed-empty">秃秃还没有生活记录</div>';
     return;
   }
-  container.innerHTML = feedEvents.map((evt, i) => {
+  if (!append) {
+    container.innerHTML = '';
+    // 重建 observers
+    if (feedObserver) feedObserver.disconnect();
+    if (feedLazyObserver) feedLazyObserver.disconnect();
+    feedObserver = new IntersectionObserver(onPlayObserve, { threshold: [0.7] });
+    feedLazyObserver = new IntersectionObserver(onLazyObserve, { rootMargin: '200px' });
+    currentPlaying = null;
+  }
+
+  events.forEach((evt, i) => {
+    const card = document.createElement('div');
+    card.className = 'feed-card';
     const isUser = evt.user_related;
     const hasVideo = evt.video_status === 'ready' && evt.video_url;
     const dateStr = formatDate(evt.publish_at);
 
-    return `<div class="feed-card">
+    card.innerHTML = `
       ${isUser ? '<div class="feed-badge user">👤 与你有关</div>' : ''}
       <div class="feed-video-wrap">
         ${hasVideo
-          ? `<video src="${evt.video_url}" playsinline webkit-playsinline loop muted
+          ? `<video data-src="${evt.video_url}" playsinline webkit-playsinline loop muted preload="none"
                onclick="this.muted=!this.muted; this.paused?this.play():this.pause()"></video>`
           : `<div class="feed-generating"><div class="spinner"></div><span>视频生成中...</span></div>`
         }
@@ -152,36 +173,69 @@ function renderFeed() {
         <div class="feed-time">${dateStr} · ${evt.time}</div>
         <div class="feed-title">${evt.title}</div>
         ${evt.inner_voice ? `<div class="feed-voice">${evt.inner_voice}</div>` : ''}
-      </div>
-    </div>`;
-  }).join('');
+      </div>`;
 
-  // 自动播放第一个视频
-  const firstVideo = container.querySelector('video');
-  if (firstVideo) firstVideo.play().catch(()=>{});
+    container.appendChild(card);
+    feedObserver.observe(card);
+    // 懒加载：视频接近可视区域时才设置 src
+    const video = card.querySelector('video');
+    if (video) feedLazyObserver.observe(video);
+  });
 
-  // 滚动时切换视频播放
-  setupScrollPlay(container);
+  // 首次加载时触发第一个视频
+  if (!append) {
+    const firstVideo = container.querySelector('video[data-src]');
+    if (firstVideo) {
+      firstVideo.src = firstVideo.dataset.src;
+      firstVideo.removeAttribute('data-src');
+      firstVideo.play().catch(()=>{});
+      currentPlaying = firstVideo;
+    }
+  }
+
+  // 滚动到底部时加载更多
+  setupInfiniteScroll(container);
 }
 
-function setupScrollPlay(container) {
-  let currentPlaying = null;
-  const observer = new IntersectionObserver(entries => {
-    entries.forEach(entry => {
-      const video = entry.target.querySelector('video');
-      if (!video) return;
-      if (entry.isIntersecting && entry.intersectionRatio > 0.7) {
-        if (currentPlaying && currentPlaying !== video) {
-          currentPlaying.pause();
-          currentPlaying.currentTime = 0;
-        }
-        video.play().catch(()=>{});
-        currentPlaying = video;
+// 懒加载：视频进入视口 200px 范围内才赋值 src
+function onLazyObserve(entries) {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const video = entry.target;
+      if (video.dataset.src) {
+        video.src = video.dataset.src;
+        video.removeAttribute('data-src');
       }
-    });
-  }, { threshold: [0.7] });
+      feedLazyObserver.unobserve(video);
+    }
+  });
+}
 
-  container.querySelectorAll('.feed-card').forEach(card => observer.observe(card));
+// 播放控制：可见度 > 70% 时自动播放，离开时暂停
+function onPlayObserve(entries) {
+  entries.forEach(entry => {
+    const video = entry.target.querySelector('video');
+    if (!video || !video.src) return;
+    if (entry.isIntersecting && entry.intersectionRatio > 0.7) {
+      if (currentPlaying && currentPlaying !== video) {
+        currentPlaying.pause();
+        currentPlaying.currentTime = 0;
+      }
+      video.play().catch(()=>{});
+      currentPlaying = video;
+    }
+  });
+}
+
+let scrollSetup = false;
+function setupInfiniteScroll(container) {
+  if (scrollSetup) return;
+  scrollSetup = true;
+  container.addEventListener('scroll', () => {
+    if (container.scrollTop + container.clientHeight >= container.scrollHeight - 200) {
+      loadFeed(true);
+    }
+  }, { passive: true });
 }
 
 function formatDate(isoStr) {
@@ -200,7 +254,6 @@ function formatDate(isoStr) {
 let chatLoaded = false;
 
 async function loadChat() {
-  if (chatLoaded) return;
   try {
     const resp = await fetch('/api/chat/history?limit=30');
     const data = await resp.json();
