@@ -17,7 +17,7 @@ def _make_prompt(extra=""):
         "3-7s：蘑菇角色跳跃。音效：啪。"
         "7-10s：蘑菇角色奔跑。音效：沙沙。"
         "10-13s：蘑菇角色看镜头。画面定格。"
-        "只要音效。注意：小蘑菇没有牙齿、没有尾巴。"
+        "只要音效。注意：小蘑菇没有牙齿、没有尾巴、没有手指。"
     )
     padded = base + "x" * max(0, 300 - len(base)) + extra
     return padded
@@ -31,7 +31,7 @@ class TestValidatePrompt:
         assert len(errors) == 0
 
     def test_missing_prefix(self):
-        text = "没有图片开头" + "x" * 300 + "0-3s 音效 没有牙齿 没有尾巴 镜头"
+        text = "没有图片开头" + "x" * 300 + "0-3s 音效 没有牙齿 没有尾巴 没有手指 镜头"
         passed, issues = validate_prompt(text)
         assert passed is False
         assert any("图片1" in i for i in issues)
@@ -43,7 +43,7 @@ class TestValidatePrompt:
         assert any("牙齿" in i for i in issues)
 
     def test_too_short(self):
-        text = "图片1 0-3s 音效 没有牙齿 没有尾巴 镜头"
+        text = "图片1 0-3s 音效 没有牙齿 没有尾巴 没有手指 镜头"
         passed, issues = validate_prompt(text)
         assert passed is False
         assert any("太短" in i for i in issues)
@@ -56,7 +56,7 @@ class TestValidatePrompt:
         assert any("偏长" in i for i in issues)
 
     def test_missing_timecode(self):
-        text = "图片1test " + "x" * 300 + " 音效 没有牙齿 没有尾巴 镜头定格"
+        text = "图片1test " + "x" * 300 + " 音效 没有牙齿 没有尾巴 没有手指 镜头定格"
         passed, issues = validate_prompt(text)
         assert passed is False
         assert any("时间码" in i for i in issues)
@@ -64,7 +64,7 @@ class TestValidatePrompt:
     def test_missing_sound(self):
         text = (
             "图片1是小蘑菇。0-3s：蘑菇跳。3-7s：走。7-10s：跑。"
-            "10-13s：看镜头。画面定格。注意：小蘑菇没有牙齿、没有尾巴。"
+            "10-13s：看镜头。画面定格。注意：小蘑菇没有牙齿、没有尾巴、没有手指。"
             + "x" * 300
         )
         passed, issues = validate_prompt(text)
@@ -95,7 +95,7 @@ class TestValidatePrompt:
             "图片1是小蘑菇。微缩。0-3s：走路。音效：嘟。"
             "3-7s：跳。音效：啪。7-10s：看。音效：沙。"
             "10-13s：结束了就这样吧。音效：无。"
-            "没有牙齿、没有尾巴。" + "x" * 200
+            "没有牙齿、没有尾巴、没有手指。" + "x" * 200
         )
         passed, issues = validate_prompt(text)
         # 缺互动beat 只是⚠️警告
