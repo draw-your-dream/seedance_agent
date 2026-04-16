@@ -17,6 +17,7 @@ import argparse
 import json
 import re
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 # 添加项目根目录到路径
@@ -68,30 +69,33 @@ def make_video_filename(num, title):
     return f"{num:02d}_{clean}.mp4"
 
 
-def download_results(tasks_file):
-    """从tasks json文件批量下载完成的视频"""
+def download_results(tasks_file, max_workers: int = 4):
+    """从tasks json文件批量下载完成的视频（并发 + 断点续传）。"""
     with open(tasks_file, "r", encoding="utf-8") as f:
         tasks = json.load(f)
 
     VIDEO_DIR.mkdir(parents=True, exist_ok=True)
-    for t in tasks:
-        if not t.get("task_id"):
-            print(f"  ⏭ #{t['num']:02d} {t['title']}: 无task_id，跳过")
-            continue
 
+    def _handle_one(t):
+        if not t.get("task_id"):
+            return f"  ⏭ #{t['num']:02d} {t['title']}: 无task_id，跳过"
         d = query_task(t["task_id"])
         status = d.get("status", "unknown")
-
         if status == "succeeded":
             url = d["content"]["video_url"]
             fname = make_video_filename(t["num"], t["title"])
             fpath = VIDEO_DIR / fname
             ok, info = download_video(url, fpath)
-            print(f"  {'✅' if ok else '❌'} #{t['num']:02d} {t['title']}: {info} -> {fname}")
+            return f"  {'✅' if ok else '❌'} #{t['num']:02d} {t['title']}: {info} -> {fname}"
         elif status == "running":
-            print(f"  ⏳ #{t['num']:02d} {t['title']}: 还在生成中")
+            return f"  ⏳ #{t['num']:02d} {t['title']}: 还在生成中"
         else:
-            print(f"  ❌ #{t['num']:02d} {t['title']}: {status}")
+            return f"  ❌ #{t['num']:02d} {t['title']}: {status}"
+
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_handle_one, t) for t in tasks]
+        for fut in as_completed(futures):
+            print(fut.result(), flush=True)
 
 
 # ============================================================

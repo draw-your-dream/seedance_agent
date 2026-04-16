@@ -176,21 +176,38 @@ def query_task(task_id: str) -> dict:
         return {"status": "error", "error": str(e)}
 
 
-def download_video(url: str, filepath) -> tuple[bool, str]:
-    """下载视频文件（流式写入）。返回 (success, message)。"""
+def download_video(url: str, filepath, max_retries: int = 3) -> tuple[bool, str]:
+    """下载视频文件（流式写入，含重试）。返回 (success, message)。
+
+    已存在且大小 > 10KB 的文件会被视为已完成，直接返回成功（断点续传友好）。
+    """
     filepath = Path(filepath)
     filepath.parent.mkdir(parents=True, exist_ok=True)
-    try:
-        with _http_client.stream("GET", url) as resp:
-            resp.raise_for_status()
-            with open(filepath, "wb") as f:
-                for chunk in resp.iter_bytes(chunk_size=65536):
-                    f.write(chunk)
-        if filepath.exists() and filepath.stat().st_size > 10000:
-            size_mb = filepath.stat().st_size / (1024 * 1024)
-            return True, f"{size_mb:.1f}MB"
-        return False, "文件太小或下载失败"
-    except httpx.TimeoutException:
-        return False, "下载超时(120s)"
-    except Exception as e:
-        return False, str(e)
+
+    # 断点续传：已存在且合法就跳过
+    if filepath.exists() and filepath.stat().st_size > 10000:
+        size_mb = filepath.stat().st_size / (1024 * 1024)
+        return True, f"已存在 {size_mb:.1f}MB"
+
+    last_error = "未知错误"
+    for attempt in range(1, max_retries + 1):
+        try:
+            with _http_client.stream("GET", url, timeout=180) as resp:
+                resp.raise_for_status()
+                with open(filepath, "wb") as f:
+                    for chunk in resp.iter_bytes(chunk_size=65536):
+                        f.write(chunk)
+            if filepath.exists() and filepath.stat().st_size > 10000:
+                size_mb = filepath.stat().st_size / (1024 * 1024)
+                return True, f"{size_mb:.1f}MB"
+            last_error = "文件太小"
+        except httpx.TimeoutException:
+            last_error = f"下载超时(180s) [第{attempt}次]"
+            logger.warning(last_error)
+        except Exception as e:
+            last_error = f"{e} [第{attempt}次]"
+            logger.warning(last_error)
+        # 清理失败的残片
+        if filepath.exists() and filepath.stat().st_size <= 10000:
+            filepath.unlink()
+    return False, f"下载失败({max_retries}次重试): {last_error}"

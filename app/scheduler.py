@@ -4,6 +4,7 @@
 import json
 import logging
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from datetime import datetime, date
 
@@ -125,48 +126,67 @@ def poll_and_download():
         return
 
     VIDEOS_DIR.mkdir(parents=True, exist_ok=True)
-    for r in rows:
-        r = dict(r)
-        retry_count = r.get("retry_count", 0) or 0
+    rows = [dict(r) for r in rows]
+    to_retry = [r for r in rows if r["video_status"] == "failed"]
+    to_check = [r for r in rows if r["video_status"] == "generating"]
 
-        # 对失败任务执行重试：重新提交
-        if r["video_status"] == "failed":
-            prompt_text = r.get("video_prompt", "")
-            if not prompt_text:
-                continue
-            try:
-                img_b64 = load_all_reference_images()
-                new_task_id, error = submit_task(prompt_text, img_b64, payload_tag=f"retry_{retry_count}")
-                if new_task_id:
-                    _update_retry(r["id"], new_task_id, retry_count + 1)
-                    print(f"  🔄 重试 [{retry_count + 1}/{MAX_RETRIES}]: {r['title']} -> {new_task_id}")
-                else:
-                    logger.warning(f"重试提交失败: {r['title']}: {error}")
-            except Exception as e:
-                logger.error(f"重试异常: {r['title']}: {e}")
-            continue
+    # 失败任务：串行重试（涉及 Seedance 提交，并发度已由 Seedance API 限制）
+    if to_retry:
+        for r in to_retry:
+            _retry_failed(r)
 
-        # 对 generating 任务查询状态
-        d = query_task(r["task_id"])
-        status = d.get("status", "unknown")
+    # generating 任务：并发查询 + 下载
+    if to_check:
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [pool.submit(_check_and_download, r) for r in to_check]
+            for fut in as_completed(futures):
+                msg = fut.result()
+                if msg:
+                    print(msg, flush=True)
 
-        if status == "succeeded":
-            url = d["content"]["video_url"]
-            fname = f"{r['id']}.mp4"
-            fpath = VIDEOS_DIR / fname
-            ok, info = download_video(url, fpath)
-            if ok:
-                db.update_event_video(r["id"], video_url=f"/static/videos/{fname}", video_status="ready")
-                print(f"  ✅ 下载完成: {r['title']} ({info})")
-            else:
-                db.update_event_video(r["id"], video_status="failed")
-                print(f"  ❌ 下载失败: {r['title']} ({info})")
-        elif status == "failed":
+
+def _retry_failed(r: dict):
+    """失败任务重新提交到 Seedance。"""
+    retry_count = r.get("retry_count", 0) or 0
+    prompt_text = r.get("video_prompt", "")
+    if not prompt_text:
+        return
+    try:
+        img_b64 = load_all_reference_images()
+        new_task_id, error = submit_task(prompt_text, img_b64, payload_tag=f"retry_{retry_count}")
+        if new_task_id:
+            _update_retry(r["id"], new_task_id, retry_count + 1)
+            print(f"  🔄 重试 [{retry_count + 1}/{MAX_RETRIES}]: {r['title']} -> {new_task_id}", flush=True)
+        else:
+            logger.warning(f"重试提交失败: {r['title']}: {error}")
+    except Exception as e:
+        logger.error(f"重试异常: {r['title']}: {e}")
+
+
+def _check_and_download(r: dict) -> str:
+    """查询单个任务状态并下载。返回日志消息。"""
+    retry_count = r.get("retry_count", 0) or 0
+    d = query_task(r["task_id"])
+    status = d.get("status", "unknown")
+
+    if status == "succeeded":
+        url = d["content"]["video_url"]
+        fname = f"{r['id']}.mp4"
+        fpath = VIDEOS_DIR / fname
+        ok, info = download_video(url, fpath)
+        if ok:
+            db.update_event_video(r["id"], video_url=f"/static/videos/{fname}", video_status="ready")
+            return f"  ✅ 下载完成: {r['title']} ({info})"
+        else:
             db.update_event_video(r["id"], video_status="failed")
-            if retry_count < MAX_RETRIES:
-                print(f"  ⚠️ 生成失败(将重试): {r['title']}")
-            else:
-                print(f"  ❌ 生成失败(已达最大重试): {r['title']}")
+            return f"  ❌ 下载失败: {r['title']} ({info})"
+    elif status == "failed":
+        db.update_event_video(r["id"], video_status="failed")
+        if retry_count < MAX_RETRIES:
+            return f"  ⚠️ 生成失败(将重试): {r['title']}"
+        else:
+            return f"  ❌ 生成失败(已达最大重试): {r['title']}"
+    return ""  # running 等状态不输出
 
 
 def _update_retry(event_id, new_task_id, retry_count):
