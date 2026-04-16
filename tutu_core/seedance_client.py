@@ -31,18 +31,34 @@ def load_reference_image(path: Path = None) -> str:
     return img_b64
 
 
-def build_payload(prompt_text: str, img_b64: str, duration: int = None) -> dict:
-    """构建Seedance API payload。"""
+def build_payload(
+    prompt_text: str,
+    img_b64: str | list[str],
+    duration: int = None,
+    video_b64: str | None = None,
+) -> dict:
+    """构建Seedance API payload。
+
+    img_b64 可以是单张图片的 base64，也可以是多张图片的 list。
+    video_b64 可选，作为 reference_video 角色传入（视觉约束比图片更强）。
+    """
+    images = [img_b64] if isinstance(img_b64, str) else img_b64
+    content = [{"type": "text", "text": prompt_text}]
+    for b in images:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/png;base64,{b}"},
+            "role": "reference_image"
+        })
+    if video_b64:
+        content.append({
+            "type": "video_url",
+            "video_url": {"url": f"data:video/mp4;base64,{video_b64}"},
+            "role": "reference_video"
+        })
     return {
         "model": SEEDANCE_MODEL,
-        "content": [
-            {"type": "text", "text": prompt_text},
-            {
-                "type": "image_url",
-                "image_url": {"url": f"data:image/png;base64,{img_b64}"},
-                "role": "reference_image"
-            }
-        ],
+        "content": content,
         "generate_audio": True,
         "ratio": SEEDANCE_RATIO,
         "duration": duration or SEEDANCE_DURATION,
@@ -71,14 +87,17 @@ def verify_payload(payload: dict) -> list[str]:
     return errors
 
 
-def submit_task(prompt_text: str, img_b64: str,
-                duration: int = None, payload_tag: str = "") -> tuple[str | None, str | None]:
+def submit_task(prompt_text: str, img_b64: str | list[str],
+                duration: int = None, payload_tag: str = "",
+                video_b64: str | None = None) -> tuple[str | None, str | None]:
     """
     构建payload、验证并提交到Seedance API。
+    img_b64 可传单张或多张参考图 base64。
+    video_b64 可选，作为 reference_video 传入。
     返回 (task_id, error_message)。
     """
     api_key = get_ark_api_key()
-    payload = build_payload(prompt_text, img_b64, duration)
+    payload = build_payload(prompt_text, img_b64, duration, video_b64=video_b64)
 
     # 提交前验证
     errors = verify_payload(payload)

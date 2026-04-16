@@ -13,3 +13,21 @@ __pycache__/
 
 # 临时文件
 /tmp/
+
+# 视频文件（太大，不纳入版本控制）
+*.mp4
+
+# 图片/PDF（大二进制文件）
+*.pdf
+*.png
+
+# JSON 数据文件（运行时生成）
+prompt生成系统/v2/life_journal.json
+prompt生成系统/v2/user_memory.json
+prompt生成系统/v2/daily_signals.json
+
+# 静态文件目录（运行时生成）
+app/static/
+
+# Claude Code 本地配置
+.claude/
