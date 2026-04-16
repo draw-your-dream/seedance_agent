@@ -43,13 +43,15 @@ logger = logging.getLogger("tutu")
 # ============================================================
 
 PROJECT_ROOT = Path(__file__).parent.parent
-REF_IMAGE = PROJECT_ROOT / "reference.png"
+REF_IMAGE_ORIGINAL = PROJECT_ROOT / "reference.png"
 REF_DIR = PROJECT_ROOT / "ref"
+REF_PROCESSED_DIR = REF_DIR / "processed"
+REF_IMAGE = REF_PROCESSED_DIR / "reference.jpg"  # 压缩版 (59KB)，原图 1.7MB
 
-# 额外参考图（手部/张嘴特写，强化角色外貌约束）
-REF_HAND_CLOSEUP = REF_DIR / "1.png"     # 手部特写：圆手无手指
-REF_MOUTH_SIDE = REF_DIR / "15.png"       # 张嘴侧面：口腔内部
-REF_FULL_BODY = REF_DIR / "34.png"        # 全身正面：嘴+手+比例综合
+# 额外参考图（预处理后：裁切+缩放+压缩，长边≤1024px）
+REF_HAND_CLOSEUP = REF_PROCESSED_DIR / "hand_closeup.jpg"    # 手部特写：圆手无手指 (65KB)
+REF_MOUTH_SIDE = REF_PROCESSED_DIR / "mouth_closeup.jpg"     # 张嘴脸部裁切 (95KB)
+REF_FULL_BODY = REF_PROCESSED_DIR / "full_body.jpg"          # 全身正面 (22KB)
 
 PROMPT_SYSTEM_DIR = PROJECT_ROOT / "prompt生成系统"
 OUTPUT_DIR = PROMPT_SYSTEM_DIR / "output"

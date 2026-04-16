@@ -14,7 +14,8 @@ _http_client = httpx.Client(timeout=120, follow_redirects=True)
 from tutu_core.config import (
     get_ark_api_key, SEEDANCE_API_URL, SEEDANCE_MODEL,
     SEEDANCE_DURATION, SEEDANCE_RATIO,
-    REF_IMAGE, REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_FULL_BODY,
+    REF_IMAGE, REF_IMAGE_ORIGINAL,
+    REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_FULL_BODY,
     REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
 )
 
@@ -22,8 +23,13 @@ logger = logging.getLogger("tutu.seedance")
 
 
 def load_reference_image(path: Path = None) -> str:
-    """加载单张参考图片为base64字符串。"""
-    img_path = path or REF_IMAGE
+    """加载单张参考图片为base64字符串。默认优先用压缩版，fallback 到原图。"""
+    if path is not None:
+        img_path = path
+    elif REF_IMAGE.exists():
+        img_path = REF_IMAGE
+    else:
+        img_path = REF_IMAGE_ORIGINAL
     if not img_path.exists():
         raise FileNotFoundError(f"参考图片不存在: {img_path}")
     with open(img_path, "rb") as f:
