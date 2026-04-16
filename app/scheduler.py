@@ -14,7 +14,8 @@ from tutu_core.config import PERSONALITY_FILE
 from tutu_core.generation import generate_schedule, generate_event_content
 from tutu_core.validators import validate_prompt
 from tutu_core.seedance_client import (
-    load_reference_image, submit_task, query_task, download_video,
+    load_reference_image, load_all_reference_images,
+    submit_task, query_task, download_video,
 )
 
 import database as db
@@ -52,7 +53,7 @@ def generate_daily(date_str=None, weather="", user_city="", hot_signals=""):
 
     # Step 2: 为每条事件生成内容
     try:
-        img_b64 = load_reference_image()
+        img_b64 = load_all_reference_images()
     except FileNotFoundError as e:
         logger.error(str(e))
         return []
@@ -134,7 +135,7 @@ def poll_and_download():
             if not prompt_text:
                 continue
             try:
-                img_b64 = load_reference_image()
+                img_b64 = load_all_reference_images()
                 new_task_id, error = submit_task(prompt_text, img_b64, payload_tag=f"retry_{retry_count}")
                 if new_task_id:
                     _update_retry(r["id"], new_task_id, retry_count + 1)
@@ -197,7 +198,7 @@ def generate_single_event(description, date_str=None):
         return None
 
     try:
-        img_b64 = load_reference_image()
+        img_b64 = load_all_reference_images()
         task_id, error = submit_task(content["video_prompt"], img_b64, payload_tag="chat_trigger")
     except FileNotFoundError:
         task_id, error = None, "参考图片不存在"

@@ -14,14 +14,15 @@ _http_client = httpx.Client(timeout=120, follow_redirects=True)
 from tutu_core.config import (
     get_ark_api_key, SEEDANCE_API_URL, SEEDANCE_MODEL,
     SEEDANCE_DURATION, SEEDANCE_RATIO,
-    REF_IMAGE, REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
+    REF_IMAGE, REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_FULL_BODY,
+    REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
 )
 
 logger = logging.getLogger("tutu.seedance")
 
 
 def load_reference_image(path: Path = None) -> str:
-    """加载参考图片为base64字符串。"""
+    """加载单张参考图片为base64字符串。"""
     img_path = path or REF_IMAGE
     if not img_path.exists():
         raise FileNotFoundError(f"参考图片不存在: {img_path}")
@@ -29,6 +30,27 @@ def load_reference_image(path: Path = None) -> str:
         img_b64 = base64.b64encode(f.read()).decode()
     logger.info(f"参考图片已加载: {img_path} ({len(img_b64)} chars)")
     return img_b64
+
+
+def load_all_reference_images() -> list[str]:
+    """加载主参考图 + 额外特写参考图（手部/张嘴/全身）。
+
+    返回 base64 列表，第一张是主参考图（图片1），后续是特写补充。
+    只加载存在的文件，不会因缺失特写而报错。
+    """
+    images = [load_reference_image()]  # 主参考图必须存在
+
+    extras = [
+        (REF_HAND_CLOSEUP, "手部特写"),
+        (REF_MOUTH_SIDE, "张嘴侧面"),
+        (REF_FULL_BODY, "全身正面"),
+    ]
+    for path, label in extras:
+        if path.exists():
+            with open(path, "rb") as f:
+                images.append(base64.b64encode(f.read()).decode())
+            logger.info(f"额外参考图已加载: {label} ({path.name})")
+    return images
 
 
 def build_payload(

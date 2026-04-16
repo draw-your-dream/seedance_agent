@@ -44,6 +44,12 @@ logger = logging.getLogger("tutu")
 
 PROJECT_ROOT = Path(__file__).parent.parent
 REF_IMAGE = PROJECT_ROOT / "reference.png"
+REF_DIR = PROJECT_ROOT / "ref"
+
+# 额外参考图（手部/张嘴特写，强化角色外貌约束）
+REF_HAND_CLOSEUP = REF_DIR / "1.png"     # 手部特写：圆手无手指
+REF_MOUTH_SIDE = REF_DIR / "15.png"       # 张嘴侧面：口腔内部
+REF_FULL_BODY = REF_DIR / "34.png"        # 全身正面：嘴+手+比例综合
 
 PROMPT_SYSTEM_DIR = PROJECT_ROOT / "prompt生成系统"
 OUTPUT_DIR = PROMPT_SYSTEM_DIR / "output"
