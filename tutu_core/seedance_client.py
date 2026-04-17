@@ -16,6 +16,7 @@ from tutu_core.config import (
     SEEDANCE_DURATION, SEEDANCE_RATIO,
     REF_IMAGE, REF_IMAGE_ORIGINAL,
     REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_FULL_BODY,
+    REF_EXPRESSION_FILES, EXPRESSION_KEYWORDS,
     REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
 )
 
@@ -39,7 +40,7 @@ def load_reference_image(path: Path = None) -> str:
 
 
 def load_all_reference_images() -> list[str]:
-    """加载主参考图 + 额外特写参考图（手部/张嘴/全身）。
+    """加载主参考图 + 固定的3张特写（手部/张嘴/全身）。
 
     返回 base64 列表，第一张是主参考图（图片1），后续是特写补充。
     只加载存在的文件，不会因缺失特写而报错。
@@ -57,6 +58,36 @@ def load_all_reference_images() -> list[str]:
                 images.append(base64.b64encode(f.read()).decode())
             logger.info(f"额外参考图已加载: {label} ({path.name})")
     return images
+
+
+def match_expressions(prompt_text: str) -> list[str]:
+    """根据 prompt 文本关键词匹配出应该附加的表情参考图 key 列表。
+
+    返回命中的表情 key（如 ["happy", "cry"]），去重且按 EXPRESSION_KEYWORDS 声明顺序。
+    """
+    matched = []
+    for expr_key, keywords in EXPRESSION_KEYWORDS.items():
+        if any(kw in prompt_text for kw in keywords):
+            matched.append(expr_key)
+    return matched
+
+
+def load_reference_images_for_prompt(prompt_text: str) -> tuple[list[str], list[str]]:
+    """根据 prompt 动态选择参考图：固定4张 + 匹配到的表情图。
+
+    返回 (base64_list, labels)。labels 供日志/调试用。
+    """
+    images = load_all_reference_images()
+    labels = ["主参考图", "手部特写", "张嘴侧面", "全身正面"][:len(images)]
+
+    for expr_key in match_expressions(prompt_text):
+        path = REF_EXPRESSION_FILES.get(expr_key)
+        if path and path.exists():
+            with open(path, "rb") as f:
+                images.append(base64.b64encode(f.read()).decode())
+            labels.append(f"表情:{expr_key}")
+            logger.info(f"表情参考图已加载: {expr_key} ({path.name})")
+    return images, labels
 
 
 def build_payload(

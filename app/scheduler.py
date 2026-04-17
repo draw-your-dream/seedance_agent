@@ -16,6 +16,7 @@ from tutu_core.generation import generate_schedule, generate_event_content
 from tutu_core.validators import validate_prompt
 from tutu_core.seedance_client import (
     load_reference_image, load_all_reference_images,
+    load_reference_images_for_prompt,
     submit_task, query_task, download_video,
 )
 
@@ -53,8 +54,9 @@ def generate_daily(date_str=None, weather="", user_city="", hot_signals=""):
     logger.info(f"生成 {len(schedule)} 条事件")
 
     # Step 2: 为每条事件生成内容
+    # 先确认主参考图存在（避免每次循环都抛异常）
     try:
-        img_b64 = load_all_reference_images()
+        load_reference_image()
     except FileNotFoundError as e:
         logger.error(str(e))
         return []
@@ -74,6 +76,10 @@ def generate_daily(date_str=None, weather="", user_city="", hot_signals=""):
         passed, issues = validate_prompt(prompt_text)
         if not passed:
             logger.warning(f"{evt['title']}: 校验问题 {issues}")
+
+        # 按 prompt 内容动态选择参考图（含表情匹配）
+        img_b64, ref_labels = load_reference_images_for_prompt(prompt_text)
+        logger.info(f"{evt['title']}: 使用{len(img_b64)}张参考图 ({', '.join(ref_labels)})")
 
         # 提交Seedance
         task_id, error = submit_task(prompt_text, img_b64, payload_tag=f"sched_{i}")
@@ -152,7 +158,7 @@ def _retry_failed(r: dict):
     if not prompt_text:
         return
     try:
-        img_b64 = load_all_reference_images()
+        img_b64, _ = load_reference_images_for_prompt(prompt_text)
         new_task_id, error = submit_task(prompt_text, img_b64, payload_tag=f"retry_{retry_count}")
         if new_task_id:
             _update_retry(r["id"], new_task_id, retry_count + 1)
@@ -218,7 +224,7 @@ def generate_single_event(description, date_str=None):
         return None
 
     try:
-        img_b64 = load_all_reference_images()
+        img_b64, _ = load_reference_images_for_prompt(content["video_prompt"])
         task_id, error = submit_task(content["video_prompt"], img_b64, payload_tag="chat_trigger")
     except FileNotFoundError:
         task_id, error = None, "参考图片不存在"
