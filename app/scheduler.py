@@ -12,7 +12,7 @@ from datetime import datetime, date
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from tutu_core.config import PERSONALITY_FILE
-from tutu_core.generation import generate_schedule, generate_event_content
+from tutu_core.generation_router import generate_schedule, generate_event_content
 from tutu_core.validators import validate_prompt
 from tutu_core.seedance_client import (
     load_reference_image, load_all_reference_images,

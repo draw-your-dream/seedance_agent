@@ -189,8 +189,8 @@ def quality_review(prompt_text: str, category: str) -> tuple[bool, list[str]]:
     import re
     issues = []
 
-    # 时间码检查 — 匹配多种写法：0-3s / 0-2s：/ 镜1（0-3s）/ 第一段
-    timecodes = re.findall(r'\d+-\d+s|镜\d|镜头\d|第[一二三四五六]段', prompt_text)
+    # 时间码检查 — 兼容：0-3s / 0-2秒 / 镜1 / 镜头1 / 第一段
+    timecodes = re.findall(r'\d+-\d+\s*[s秒]|镜\d|镜头\d|第[一二三四五六]段', prompt_text)
     if len(timecodes) < 2:
         issues.append("分段不足：只有{}段标记，建议至少3-4段分镜".format(len(timecodes)))
 

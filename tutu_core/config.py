@@ -137,6 +137,9 @@ SEEDANCE_RATIO = "9:16"
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "gemini")
 ARK_LLM_MODEL = "doubao-1-5-pro-256k-250115"
 
+# prompt 生成版本切换：v1(默认，保留不动) / v2(基于示例 prompt 迭代的新版)
+GENERATION_VERSION = os.environ.get("GENERATION_VERSION", "v1").lower()
+
 # ============================================================
 # Admin
 # ============================================================

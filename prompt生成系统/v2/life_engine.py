@@ -30,8 +30,8 @@ from tutu_core.config import (
     DB_PATH,
 )
 from tutu_core.llm_client import call_llm, extract_json
-from tutu_core.generation import generate_schedule as _core_generate_schedule
-from tutu_core.generation import generate_event_content as _core_generate_event_content
+from tutu_core.generation_router import generate_schedule as _core_generate_schedule
+from tutu_core.generation_router import generate_event_content as _core_generate_event_content
 from tutu_core.validators import validate_prompt
 from tutu_core.seedance_client import (
     load_reference_image, submit_task, query_task, download_video,
