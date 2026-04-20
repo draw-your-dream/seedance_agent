@@ -86,6 +86,9 @@ DAILY_SIGNALS_FILE = V2_DIR / "daily_signals.json"
 APP_DIR = PROJECT_ROOT / "app"
 DB_PATH = APP_DIR / "tutu.db"
 
+# prompt 归档目录：submit_task 成功后将 prompt 文本按 task_id 落盘
+PROMPT_ARCHIVE_DIR = PROJECT_ROOT / "prompt生成系统" / "output" / "submitted_prompts"
+
 # ============================================================
 # API密钥（从环境变量读取）
 # ============================================================

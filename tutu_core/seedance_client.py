@@ -18,9 +18,23 @@ from tutu_core.config import (
     REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_FULL_BODY,
     REF_EXPRESSION_FILES, EXPRESSION_KEYWORDS,
     REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
+    PROMPT_ARCHIVE_DIR,
 )
 
 logger = logging.getLogger("tutu.seedance")
+
+
+def _archive_prompt(task_id: str, prompt_text: str, payload_tag: str = ""):
+    """提交成功后将 prompt 文本按 task_id 落盘，便于后续审阅。"""
+    try:
+        PROMPT_ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
+        fname = f"{task_id}.txt"
+        with open(PROMPT_ARCHIVE_DIR / fname, "w", encoding="utf-8") as f:
+            if payload_tag:
+                f.write(f"# payload_tag: {payload_tag}\n# task_id: {task_id}\n# length: {len(prompt_text)}\n\n")
+            f.write(prompt_text)
+    except Exception as e:
+        logger.warning(f"归档 prompt 失败（非致命）: {e}")
 
 
 def load_reference_image(path: Path = None) -> str:
@@ -179,6 +193,7 @@ def submit_task(prompt_text: str, img_b64: str | list[str],
         )
         data = resp.json()
         if "id" in data:
+            _archive_prompt(data["id"], prompt_text, payload_tag)
             return data["id"], None
         elif "error" in data:
             err = data["error"]

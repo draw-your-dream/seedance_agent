@@ -20,6 +20,9 @@ __pycache__/
 # 打包文件
 *.zip
 
+# submit_task 自动归档的 prompt（本地开发用，不入仓库）
+prompt生成系统/output/submitted_prompts/
+
 # 图片/PDF（大二进制文件）
 *.pdf
 *.png
