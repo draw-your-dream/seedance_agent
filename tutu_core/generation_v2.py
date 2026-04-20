@@ -37,43 +37,12 @@ logger = logging.getLogger("tutu.generation_v2")
 
 
 # ============================================================
-# v2 新增：视觉风格 + 运镜 + 收尾模板库
+# v2 视觉风格 — 常量抽至 visual_style.py（v1 也会复用）
 # ============================================================
 
-VISUAL_STYLE_TOKENS = (
-    "日系写实摄影风格，大光圈浅景深，低饱和暖色调，"
-    "画面有真实胶片的颗粒感和柔和高光溢出，微缩世界写实风格"
+from tutu_core.visual_style import (
+    VISUAL_STYLE_TOKENS, TIME_TO_LIGHT, time_to_light as _time_to_light,
 )
-
-# 默认光线配置（按事件时间段自动选择）
-TIME_TO_LIGHT = {
-    "早晨": "清晨柔和自然光从窗户斜照进来，色温偏暖，光斑柔软",
-    "上午": "上午明亮柔和的自然光，色温中性偏暖，画面通透明亮",
-    "中午": "正午自然光均匀洒在场景里，低饱和暖色调",
-    "下午": "午后柔和自然光，阳光暖洋洋的，树影斑驳",
-    "傍晚": "傍晚橘黄色夕阳光，色温明显偏暖，光线有方向感",
-    "夜晚": "夜晚室内只有台灯发出暖黄色柔光照亮小一片区域，其余部分暗暗的，深夜独处氛围",
-}
-
-
-def _time_to_light(time_str: str) -> str:
-    """根据 HH:MM 时间返回对应的光线描述。"""
-    try:
-        hour = int(time_str.split(":")[0])
-    except (ValueError, IndexError):
-        return TIME_TO_LIGHT["下午"]
-    if hour < 9:
-        return TIME_TO_LIGHT["早晨"]
-    elif hour < 12:
-        return TIME_TO_LIGHT["上午"]
-    elif hour < 14:
-        return TIME_TO_LIGHT["中午"]
-    elif hour < 18:
-        return TIME_TO_LIGHT["下午"]
-    elif hour < 20:
-        return TIME_TO_LIGHT["傍晚"]
-    else:
-        return TIME_TO_LIGHT["夜晚"]
 
 
 # ============================================================

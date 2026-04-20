@@ -14,6 +14,9 @@ from tutu_core.config import (
     PERSONALITY_FILE, IP_CONSTITUTION_FILE, PROMPT_SYSTEM_DIR,
 )
 from tutu_core.llm_client import call_llm, extract_json
+from tutu_core.visual_style import (
+    VISUAL_STYLE_TOKENS, time_to_light, COMPOSITION_HINT,
+)
 
 logger = logging.getLogger("tutu.generation")
 
@@ -338,6 +341,7 @@ def generate_event_content(
     """
     title = event.get("title", "")
     summary = event.get("summary", "")
+    time_str = event.get("time", "12:00")
 
     # Step 1: 分类
     category = classify_event(title, summary)
@@ -347,6 +351,7 @@ def generate_event_content(
     example = _load_example_for_category(category)
     guidance = _get_category_guidance(category)
     personality = _load_cached(PERSONALITY_FILE)
+    light_desc = time_to_light(time_str)
 
     # Step 3: 构建增强 prompt
     system_prompt = f"""{personality}
@@ -357,6 +362,12 @@ def generate_event_content(
 3. 碎碎念时间线（2-3条短句）
 
 {guidance}
+
+【视觉风格 / 光线 / 构图 / 比例】（从 v2 继承，不改变分镜结构）
+· 摄影风格：{VISUAL_STYLE_TOKENS}
+· 光线：{light_desc}
+· {COMPOSITION_HINT}
+（以上描述在 prompt 开头的场景段落里体现，不要额外占用分镜时间码）
 
 视频prompt硬性规则：
 · 以"图片1是小蘑菇角色形象参考。"开头。若描述中出现张嘴、手部动作或特定情绪（开心/大笑/大哭/害羞/生气），可能会附加额外参考图，prompt 中不需要显式列出所有图片编号（Seedance 会综合参考所有附带图片）
