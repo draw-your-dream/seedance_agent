@@ -49,7 +49,7 @@ REF_PROCESSED_DIR = REF_DIR / "processed"
 REF_IMAGE = REF_PROCESSED_DIR / "reference.jpg"  # 压缩版 (59KB)，原图 1.7MB
 
 # 额外参考图（预处理后：裁切+缩放+压缩，长边≤1024px）
-REF_HAND_CLOSEUP = REF_PROCESSED_DIR / "hand_closeup.jpg"    # 手部特写：圆手无手指 (65KB)
+REF_HAND_CLOSEUP = REF_PROCESSED_DIR / "hand_closeup.jpg"    # 手部特写：圆形肢体末端无爪子 (65KB)
 REF_MOUTH_SIDE = REF_PROCESSED_DIR / "mouth_closeup.jpg"     # 张嘴脸部裁切 (95KB)
 REF_FULL_BODY = REF_PROCESSED_DIR / "full_body.jpg"          # 全身正面 (22KB)
 

@@ -104,6 +104,57 @@ def load_reference_images_for_prompt(prompt_text: str) -> tuple[list[str], list[
     return images, labels
 
 
+# ============================================================
+# 图片声明注入（让 Seedance 知道每张附加图的用途）
+# ============================================================
+
+# 表情 key → 中文显示名
+_EXPRESSION_ZH = {
+    "happy": "开心",
+    "laugh": "大笑",
+    "cry":   "委屈哭泣",
+    "shy":   "害羞",
+    "angry": "生气奶凶",
+}
+
+
+def build_image_declaration(prompt_text: str) -> tuple[str, list[str]]:
+    """根据 prompt 内容构建"图片1是...图片2是...图片N是..."完整声明段。
+
+    返回 (declaration_sentence, expression_keys)。
+    """
+    parts = [
+        "图片1是小蘑菇角色形象参考",
+        "图片2是肢体末端（圆形无爪子）特写参考",
+        "图片3是张嘴表情（嘴内黑色）特写参考",
+        "图片4是全身比例参考",
+    ]
+    matched = match_expressions(prompt_text)
+    for i, expr in enumerate(matched):
+        zh = _EXPRESSION_ZH.get(expr, expr)
+        parts.append(f"图片{5 + i}是「{zh}」表情参考")
+    declaration = "。".join(parts) + "。描述动作或表情时可以显式引用对应图片。"
+    return declaration, matched
+
+
+def inject_image_declaration(prompt_text: str) -> str:
+    """把完整图片声明注入 prompt 开头，替换原有的"图片1是小蘑菇角色形象参考。"。
+
+    幂等：如果 prompt 已包含"图片2是"或"图片3是"则不重复注入。
+    """
+    if "图片2是" in prompt_text or "图片3是" in prompt_text:
+        return prompt_text  # 已有完整声明
+    declaration, _ = build_image_declaration(prompt_text)
+    # 找原有的 "图片1是..." 片段并替换
+    # 匹配第一句以"图片1"开头到第一个"。"
+    import re
+    m = re.match(r'(图片1[^。]*。)', prompt_text)
+    if m:
+        return declaration + prompt_text[m.end():]
+    # 兜底：如果 prompt 不以图片1开头，直接在前面拼
+    return declaration + prompt_text
+
+
 def build_payload(
     prompt_text: str,
     img_b64: str | list[str],
@@ -170,6 +221,11 @@ def submit_task(prompt_text: str, img_b64: str | list[str],
     返回 (task_id, error_message)。
     """
     api_key = get_ark_api_key()
+    # 自动在 prompt 开头注入完整的图片声明段（让 Seedance 知道每张附加图的用途）
+    # 注入策略：传了多张图时才注入，单图无需
+    n_imgs = len(img_b64) if isinstance(img_b64, list) else 1
+    if n_imgs > 1:
+        prompt_text = inject_image_declaration(prompt_text)
     payload = build_payload(prompt_text, img_b64, duration, video_b64=video_b64)
 
     # 提交前验证
