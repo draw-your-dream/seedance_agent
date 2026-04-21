@@ -15,7 +15,7 @@ from tutu_core.config import (
     get_ark_api_key, SEEDANCE_API_URL, SEEDANCE_MODEL,
     SEEDANCE_DURATION, SEEDANCE_RATIO,
     REF_IMAGE, REF_IMAGE_ORIGINAL,
-    REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_FULL_BODY,
+    REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_BACK, REF_FULL_BODY,
     REF_EXPRESSION_FILES, EXPRESSION_KEYWORDS,
     REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
     PROMPT_ARCHIVE_DIR,
@@ -54,7 +54,7 @@ def load_reference_image(path: Path = None) -> str:
 
 
 def load_all_reference_images() -> list[str]:
-    """加载主参考图 + 固定的3张特写（手部/张嘴/全身）。
+    """加载主参考图 + 固定的4张特写（手部/张嘴/屁股/全身）。
 
     返回 base64 列表，第一张是主参考图（图片1），后续是特写补充。
     只加载存在的文件，不会因缺失特写而报错。
@@ -64,6 +64,7 @@ def load_all_reference_images() -> list[str]:
     extras = [
         (REF_HAND_CLOSEUP, "手部特写"),
         (REF_MOUTH_SIDE, "张嘴侧面"),
+        (REF_BACK, "屁股特写"),
         (REF_FULL_BODY, "全身正面"),
     ]
     for path, label in extras:
@@ -75,15 +76,40 @@ def load_all_reference_images() -> list[str]:
 
 
 def match_expressions(prompt_text: str) -> list[str]:
-    """根据 prompt 文本关键词匹配出应该附加的表情参考图 key 列表。
+    """根据 prompt 文本匹配出应该附加的表情参考图 key 列表。
 
-    返回命中的表情 key（如 ["happy", "cry"]），去重且按 EXPRESSION_KEYWORDS 声明顺序。
+    匹配两种来源，合并去重：
+    1. EXPRESSION_KEYWORDS 关键词（如"眯眼笑"、"委屈"）
+    2. 显式占位符（如 `{happy}` / `{cry}`）— LLM 主动标注的引用点
+
+    返回按 EXPRESSION_KEYWORDS 声明顺序排列的 key 列表。
     """
-    matched = []
+    matched = set()
     for expr_key, keywords in EXPRESSION_KEYWORDS.items():
         if any(kw in prompt_text for kw in keywords):
-            matched.append(expr_key)
-    return matched
+            matched.add(expr_key)
+    for expr_key in EXPRESSION_KEYWORDS:
+        if f"{{{expr_key}}}" in prompt_text:
+            matched.add(expr_key)
+    # 保持 EXPRESSION_KEYWORDS 的声明顺序
+    return [k for k in EXPRESSION_KEYWORDS if k in matched]
+
+
+_EXPR_BASE_INDEX = 6  # 图片 1-5 是固定图，表情图从图片6 开始
+
+
+def resolve_expression_placeholders(prompt_text: str, matched_order: list[str]) -> str:
+    """把 prompt 里的 `{emotion}` 占位符按 matched 顺序替换成对应的 `图片N`。
+
+    替换多种变体：
+      `{happy}情绪图片` / `{happy}表情图片` / `{happy}情绪图` / `{happy}表情图` / `{happy}`
+    未被匹配到（matched_order 里没有）的占位符保持不变（caller 可以作为校验信号）。
+    """
+    for idx, expr_key in enumerate(matched_order):
+        img_num = _EXPR_BASE_INDEX + idx
+        for suffix in ("情绪图片", "表情图片", "情绪图", "表情图", "情绪参考", "表情参考", ""):
+            prompt_text = prompt_text.replace(f"{{{expr_key}}}{suffix}", f"图片{img_num}")
+    return prompt_text
 
 
 def load_reference_images_for_prompt(prompt_text: str) -> tuple[list[str], list[str]]:
@@ -92,7 +118,7 @@ def load_reference_images_for_prompt(prompt_text: str) -> tuple[list[str], list[
     返回 (base64_list, labels)。labels 供日志/调试用。
     """
     images = load_all_reference_images()
-    labels = ["主参考图", "手部特写", "张嘴侧面", "全身正面"][:len(images)]
+    labels = ["主参考图", "手部特写", "张嘴侧面", "屁股特写", "全身正面"][:len(images)]
 
     for expr_key in match_expressions(prompt_text):
         path = REF_EXPRESSION_FILES.get(expr_key)
@@ -127,32 +153,40 @@ def build_image_declaration(prompt_text: str) -> tuple[str, list[str]]:
         "图片1是小蘑菇角色形象参考",
         "图片2是肢体末端（圆形无爪子）特写参考",
         "图片3是张嘴表情（嘴内黑色）特写参考",
-        "图片4是全身比例参考",
+        "图片4是屁股特写参考",
+        "图片5是全身比例参考",
     ]
     matched = match_expressions(prompt_text)
     for i, expr in enumerate(matched):
         zh = _EXPRESSION_ZH.get(expr, expr)
-        parts.append(f"图片{5 + i}是「{zh}」表情参考")
+        parts.append(f"图片{6 + i}是「{zh}」表情参考")
     declaration = "。".join(parts) + "。描述动作或表情时可以显式引用对应图片。"
     return declaration, matched
 
 
 def inject_image_declaration(prompt_text: str) -> str:
-    """把完整图片声明注入 prompt 开头，替换原有的"图片1是小蘑菇角色形象参考。"。
+    """把完整图片声明注入 prompt 开头（规则生成，不依赖 LLM 的自述）。
 
-    幂等：如果 prompt 已包含"图片2是"或"图片3是"则不重复注入。
+    流程：
+    1. **剥离** LLM 在开头自己写的"图片1是...图片2是...图片N是..."连续声明
+       （LLM 经常漏写表情图对应的图片编号，所以不信任它的自述）
+    2. **规则生成**完整声明（含匹配到的表情图）
+    3. 把规则声明贴在剥离后的 prompt 开头
     """
-    if "图片2是" in prompt_text or "图片3是" in prompt_text:
-        return prompt_text  # 已有完整声明
-    declaration, _ = build_image_declaration(prompt_text)
-    # 找原有的 "图片1是..." 片段并替换
-    # 匹配第一句以"图片1"开头到第一个"。"
     import re
-    m = re.match(r'(图片1[^。]*。)', prompt_text)
-    if m:
-        return declaration + prompt_text[m.end():]
-    # 兜底：如果 prompt 不以图片1开头，直接在前面拼
-    return declaration + prompt_text
+    declaration, _ = build_image_declaration(prompt_text)
+
+    # 剥离开头所有以"图片N是"开头的连续声明句（含"描述动作..."提示语）
+    # 同时容忍换行、空白
+    stripped = prompt_text
+    # 先删一条类似"描述动作或表情时可以显式引用对应图片。"的提示句
+    stripped = re.sub(
+        r'^\s*(?:图片\d+[^。]*。\s*)+(?:描述[^。]*引用[^。]*。\s*)?',
+        '',
+        stripped,
+        count=1,
+    )
+    return declaration + "\n\n" + stripped.lstrip()
 
 
 def build_payload(
@@ -225,6 +259,11 @@ def submit_task(prompt_text: str, img_b64: str | list[str],
     # 注入策略：传了多张图时才注入，单图无需
     n_imgs = len(img_b64) if isinstance(img_b64, list) else 1
     if n_imgs > 1:
+        # 1. 先根据 prompt 文本确定表情图匹配顺序
+        matched = match_expressions(prompt_text)
+        # 2. 把 {happy}/{cry}/... 占位符替换成图片编号
+        prompt_text = resolve_expression_placeholders(prompt_text, matched)
+        # 3. 最后注入"图片1是...图片N是..."完整声明
         prompt_text = inject_image_declaration(prompt_text)
     payload = build_payload(prompt_text, img_b64, duration, video_b64=video_b64)
 

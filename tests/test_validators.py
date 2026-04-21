@@ -3,6 +3,7 @@
 
 import pytest
 from tutu_core.validators import validate_prompt, quick_validate
+from tutu_core.generation import quality_review
 
 
 # ============================================================
@@ -130,3 +131,53 @@ class TestQuickValidate:
         result = quick_validate("不出现手指 0-3s 音效 构图 微缩 不要太大")
         forbidden = [i for i in result["issues"] if "手指" in i]
         assert len(forbidden) == 0
+
+
+# ============================================================
+# 禁止说话（quality_review 中的新增检查）
+# ============================================================
+
+class TestNoSpeech:
+    """秃秃只能用拟声词，不能有台词/独白"""
+
+    def _base(self) -> str:
+        """一段合格的 v1 prompt 基座（含所有必需要素），用于拼接违规片段测试"""
+        return (
+            "图片1是小蘑菇角色形象参考。中近景对称构图。不要太大。"
+            "0-3秒：秃秃歪头看镜头，眼睛眯起来，腮帮子鼓鼓的。音效：嘟嘟。"
+            "3-7秒：它慢慢爬，沙沙声。表情：脸红。"
+            "7-10秒：duang 一声弹起。音效：啪叽。"
+            "10-13秒：望向镜头定格。音效：嘟～。"
+            + "x" * 200
+        )
+
+    def test_clean_passes(self):
+        passed, issues = quality_review(self._base(), "日常生活")
+        assert not any("说话" in i or "台词" in i for i in issues)
+
+    def test_rejects_inner_monologue(self):
+        text = self._base() + '秃秃仿佛在无声地说："看，我搞定了。"'
+        _, issues = quality_review(text, "日常生活")
+        assert any("说话" in i or "台词" in i for i in issues)
+
+    def test_rejects_speech_quote(self):
+        text = self._base() + '秃秃高兴地说："今天真开心呢！"'
+        _, issues = quality_review(text, "日常生活")
+        assert any("说话" in i or "台词" in i for i in issues)
+
+    def test_rejects_like_said(self):
+        text = self._base() + '像在说："你好呀朋友"，然后眨眼。'
+        _, issues = quality_review(text, "日常生活")
+        assert any("说话" in i or "台词" in i for i in issues)
+
+    def test_onomatopoeia_quote_ok(self):
+        """拟声词用引号包围是允许的"""
+        text = self._base() + '发出一声满足的"嘟～"。'
+        _, issues = quality_review(text, "日常生活")
+        assert not any("说话" in i or "台词" in i for i in issues)
+
+    def test_short_quote_ok(self):
+        """极短的引号（如拟声）不触发，至少 3 字才算人类语句"""
+        text = self._base() + '嘟！"啊"一下。'
+        _, issues = quality_review(text, "日常生活")
+        assert not any("说话" in i or "台词" in i for i in issues)

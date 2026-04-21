@@ -51,6 +51,7 @@ REF_IMAGE = REF_PROCESSED_DIR / "reference.jpg"  # 压缩版 (59KB)，原图 1.7
 # 额外参考图（预处理后：裁切+缩放+压缩，长边≤1024px）
 REF_HAND_CLOSEUP = REF_PROCESSED_DIR / "hand_closeup.jpg"    # 手部特写：圆形肢体末端无爪子 (65KB)
 REF_MOUTH_SIDE = REF_PROCESSED_DIR / "mouth_closeup.jpg"     # 张嘴脸部裁切 (95KB)
+REF_BACK = REF_PROCESSED_DIR / "back.jpg"                    # 屁股特写 (106KB)
 REF_FULL_BODY = REF_PROCESSED_DIR / "full_body.jpg"          # 全身正面 (22KB)
 
 # 表情参考图（按需注入，prompt 含相关关键词时才附加）
