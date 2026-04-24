@@ -2,3 +2,5 @@ outputs/
 __pycache__/
 *.pyc
 .DS_Store
+sku_orig/
+push_to_github.ps1
