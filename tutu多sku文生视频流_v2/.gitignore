@@ -1,0 +1,7 @@
+﻿outputs/
+__pycache__/
+*.pyc
+.DS_Store
+ABC对齐*.md
+50条完整样本.md
+
