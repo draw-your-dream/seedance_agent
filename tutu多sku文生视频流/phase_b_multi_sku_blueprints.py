@@ -25,6 +25,21 @@ SKU_DIR = PIPELINE_DIR / "sku"
 SKU_COUNT = 7
 HAND_FOOT_IMAGE = SKU_DIR / "hand_foot.jpg"
 MOUTH_IMAGE = SKU_DIR / "mouth.jpg"
+BUTT_IMAGE = SKU_DIR / "屁股.png"
+
+# SKU 名称 + 形象描述（写进 prompt 首段，且整段 prompt 里"蘑菇TUTU"前面都要带这个款式名）
+SKU_REGISTRY: dict[int, dict[str, str]] = {
+    1: {"name": "潜水款", "description": "蓝色的伞盖上有白色的斑点，头顶戴着一副粉色边框的泳镜，左侧别着一朵白色小花"},
+    2: {"name": "冰晶款", "description": "浅蓝色的伞盖上有白色的斑点，右侧佩戴着一簇冰晶发饰"},
+    3: {"name": "甜品款", "description": "黄色的伞盖上有深黄色的斑点，头顶顶着一撮白色的奶油和一颗红草莓"},
+    4: {"name": "花花款", "description": "粉色的伞盖上有白色的斑点，头顶有一朵白花，花上停着一只黄色的蝴蝶"},
+    5: {"name": "星月款", "description": "紫色的伞盖上有黄色的星星图案，头顶顶着一根融化的白色蜡烛"},
+    6: {"name": "森林款", "description": "棕色的伞盖上有白色的斑点，头顶的绿叶上停着一只白色的小鸟"},
+    7: {"name": "基础款", "description": "红色的伞盖上有白色的斑点"},
+}
+
+# 抽样权重：基础款 60%，其余 6 款合计 40%（平均每款 ≈6.67%）
+SKU_WEIGHTS: dict[int, float] = {1: 40 / 6, 2: 40 / 6, 3: 40 / 6, 4: 40 / 6, 5: 40 / 6, 6: 40 / 6, 7: 60.0}
 
 DEFAULT_CONTEXTS = OUTPUT_DIR / "phase_a" / "latest" / "phase_a_contexts.jsonl"
 DEFAULT_OUTPUT_DIR = OUTPUT_DIR / "multi_sku_blueprints"
@@ -85,7 +100,9 @@ def title_from_context(context: dict[str, Any], index: int) -> str:
 
 
 def pick_sku_index(rng: random.Random) -> int:
-    return rng.randint(1, SKU_COUNT)
+    indices = list(SKU_WEIGHTS.keys())
+    weights = [SKU_WEIGHTS[i] for i in indices]
+    return rng.choices(indices, weights=weights, k=1)[0]
 
 
 def resolve_sku_path(sku_index: int) -> Path:
@@ -100,6 +117,10 @@ def resolve_sku_path(sku_index: int) -> Path:
 def build_blueprint(index: int, context: dict[str, Any], rng: random.Random) -> dict[str, Any]:
     sku_index = pick_sku_index(rng)
     sku_path = resolve_sku_path(sku_index)
+    sku_meta = SKU_REGISTRY[sku_index]
+    sku_name = sku_meta["name"]
+    sku_description = sku_meta["description"]
+    sku_full_phrase = f"{sku_name}蘑菇TUTU，{sku_description}"
     title = title_from_context(context, index)
     context_subset = {field: context.get(field) for field in CONTEXT_FIELDS}
     return {
@@ -107,9 +128,13 @@ def build_blueprint(index: int, context: dict[str, Any], rng: random.Random) -> 
         "context_id": context.get("context_id"),
         "title": title,
         "sku_index": sku_index,
+        "sku_name": sku_name,
+        "sku_description": sku_description,
+        "sku_full_phrase": sku_full_phrase,
         "sku_image_path": str(sku_path.resolve()),
         "hand_foot_image_path": str(HAND_FOOT_IMAGE.resolve()),
         "mouth_image_path": str(MOUTH_IMAGE.resolve()),
+        "butt_image_path": str(BUTT_IMAGE.resolve()),
         "context": context_subset,
     }
 
@@ -150,6 +175,8 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
         raise FileNotFoundError(f"Missing hand/foot reference: {HAND_FOOT_IMAGE}")
     if not MOUTH_IMAGE.exists():
         raise FileNotFoundError(f"Missing mouth reference: {MOUTH_IMAGE}")
+    if not BUTT_IMAGE.exists():
+        raise FileNotFoundError(f"Missing butt reference: {BUTT_IMAGE}")
 
     output_dir: Path = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)

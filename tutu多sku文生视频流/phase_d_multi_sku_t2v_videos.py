@@ -18,6 +18,7 @@ OUTPUT_DIR = PIPELINE_DIR / "outputs"
 SKU_DIR = PIPELINE_DIR / "sku"
 HAND_FOOT_IMAGE = SKU_DIR / "hand_foot.jpg"
 MOUTH_IMAGE = SKU_DIR / "mouth.jpg"
+BUTT_IMAGE = SKU_DIR / "屁股.png"
 
 DEFAULT_PROMPTS = OUTPUT_DIR / "multi_sku_t2v_prompts" / "phase_c_multi_sku_t2v_prompts.jsonl"
 DEFAULT_OUTPUT_DIR = OUTPUT_DIR / "multi_sku_t2v_videos"
@@ -75,6 +76,7 @@ def build_payload(
     character_image_url: str,
     hand_foot_image_url: str,
     mouth_image_url: str,
+    butt_image_url: str,
     *,
     model: str,
     ratio: str,
@@ -102,6 +104,11 @@ def build_payload(
             {
                 "type": "image_url",
                 "image_url": {"url": mouth_image_url},
+                "role": "reference_image",
+            },
+            {
+                "type": "image_url",
+                "image_url": {"url": butt_image_url},
                 "role": "reference_image",
             },
         ],
@@ -206,8 +213,10 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
 
     hand_foot_value = args.hand_foot_image_url or str(HAND_FOOT_IMAGE)
     mouth_value = args.mouth_image_url or str(MOUTH_IMAGE)
+    butt_value = getattr(args, "butt_image_url", None) or str(BUTT_IMAGE)
     hand_foot_url = ensure_image_url(hand_foot_value, allow_data_url=args.allow_data_url_for_local_images)
     mouth_url = ensure_image_url(mouth_value, allow_data_url=args.allow_data_url_for_local_images)
+    butt_url = ensure_image_url(butt_value, allow_data_url=args.allow_data_url_for_local_images)
 
     selected = prompts[: args.limit] if args.limit else prompts
     for record in selected:
@@ -231,6 +240,7 @@ def run(args: argparse.Namespace) -> list[dict[str, Any]]:
             character_image_url=character_url,
             hand_foot_image_url=hand_foot_url,
             mouth_image_url=mouth_url,
+            butt_image_url=butt_url,
             model=args.model,
             ratio=args.ratio,
             duration=args.duration,

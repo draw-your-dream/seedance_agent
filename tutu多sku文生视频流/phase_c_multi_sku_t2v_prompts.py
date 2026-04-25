@@ -27,7 +27,7 @@ OUTPUT_DIR = PIPELINE_DIR / "outputs"
 GEMINI_API_KEY = os.environ.get("PICAA_API_KEY") or os.environ.get("GEMINI_API_KEY") or "Nmqoo7UOx2z4PW6X7oNkUb8WRCZrDvwB"
 GEMINI_URL = os.environ.get(
     "GEMINI_URL",
-    "https://ai.ssnai.com/gemini/v1beta/models/gemini-3.1-pro-preview:generateContent",
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
 )
 
 DEFAULT_BLUEPRINTS = OUTPUT_DIR / "multi_sku_blueprints" / "phase_b_multi_sku_blueprints.jsonl"
@@ -88,6 +88,63 @@ FORBIDDEN_SUBSTR_REPLACEMENTS = {
     "横版": "",
     "竖构图": "",
     "横构图": "",
+    # 约束段第三项的回退兜底：模型常被前两句"X 保持一致"的对仗带偏，给图片3 也续成"保持一致"。
+    "图片3 的嘴形和嘴内颜色保持一致": "参考图片3 嘴形和嘴内颜色",
+    "图片3的嘴形和嘴内颜色保持一致": "参考图片3嘴形和嘴内颜色",
+    # 标签纠偏：模型有时会写"配乐/音效："或"配乐："——统一收敛到"音效："
+    "配乐/音效：": "音效：",
+    "配乐/音效:": "音效：",
+    "配乐：": "音效：",
+    "配乐:": "音效：",
+    # 严禁 BGM：剥掉模型偷偷夹带的背景音乐描述（先剥 musical 元素，再清理悬挂连接词由后续正则处理）
+    # 注意：不能直接剥"背景音乐"——AUDIO_BAN_SENTENCE 里要保留这个词；只剥正向描述
+    "轻柔的背景音乐": "",
+    "轻快的背景音乐": "",
+    "舒缓的背景音乐": "",
+    "治愈的背景音乐": "",
+    "温暖的背景音乐": "",
+    "悠扬的背景音乐": "",
+    "柔和的背景音乐": "",
+    "悦耳的背景音乐": "",
+    "BGM": "",
+    "bgm": "",
+    "钢琴曲": "",
+    "吉他声": "",
+    "小提琴声": "",
+    "竖琴声": "",
+    "口琴声": "",
+    "音乐盒": "",
+    "轻音乐": "",
+    "纯音乐": "",
+    "治愈系音乐": "",
+    "治愈音乐": "",
+    "舒缓的旋律": "",
+    "轻柔的旋律": "",
+    "温暖的旋律": "",
+    "背景旋律": "",
+    "旋律": "",
+    "和弦": "",
+    "节奏感": "",
+    "曲调": "",
+    "配乐": "",
+    # 镜头不准抖：把"手持呼吸感"和各类晃动/来回摇摆描述整体抹掉
+    "轻度手持呼吸感": "",
+    "轻微手持呼吸感": "",
+    "极轻微的手持呼吸感": "",
+    "极轻微手持呼吸感": "",
+    "手持呼吸感": "",
+    "手持感": "",
+    "画面微颤": "",
+    "镜头微颤": "",
+    "镜头颠簸": "",
+    "镜头抖动": "",
+    "轻微晃动": "",
+    "左右晃动": "",
+    "左右摇摆": "",
+    "来回摇摆": "",
+    "来回晃": "",
+    "来回摆动": "",
+    "镜头摇晃": "",
 }
 
 
@@ -116,7 +173,7 @@ def strip_time_codes(text: str) -> str:
 
 
 def strip_forced_mouth(text: str) -> str:
-    # 把首段"图片3 是...嘴巴解剖参考..."保留，只清理场景段里的强引用死句
+    # 把首段"图片3 是...表情参考..."保留，只清理场景段里的强引用死句
     # 策略：只对首段后的部分应用
     paragraphs = text.split("\n\n")
     if not paragraphs:
@@ -145,11 +202,58 @@ def sanitize_prompt(text: str) -> str:
     text = re.sub(r"([：:])\s*[。，,]\s*", r"\1", text)
     text = re.sub(r"[。]\s*[，,]", "，", text)
     text = re.sub(r"[，,]\s*[。]", "。", text)
+    # 清理 sanitize 剥词后悬挂的连接词：例如"无任何 X 或" / "X 或，" / "X 和。"
+    text = re.sub(r"(或|和)\s*([。；;])", r"\2", text)
+    text = re.sub(r"(或|和)\s*([，,])\s*", "，", text)
+    text = re.sub(r"([，,])\s*(或|和)\s*([，,])", "，", text)
+    # 修复"任何 X 或 Y"剥词后剩"任何或 Y"的情况（X 被 sanitize 删掉但留下了"或"+后续词）
+    text = re.sub(r"(无|没有|杜绝|严禁|不允许|禁止)\s*任何\s*或\s*", r"\1任何", text)
+    text = re.sub(r"任何\s*或\s*", "任何", text)
+    # 强制兜底：音效段必须以"禁止背景音乐，只能有环境声和蘑菇TUTU 的声音。"结尾
+    text = ensure_audio_ban(text)
+    # 强制兜底：图片2 的描述统一规范化（不带 sku 前缀，写"毛绒粉色小手小脚"+"不准是圆柱形肉垫"）
+    text = normalize_image2_sentence(text)
     return text.strip()
 
 
-REQUIRED_SECTION_TAGS = ["风格：", "镜头：", "场景：", "配乐/音效：", "约束："]
-REQUIRED_IMAGE_TOKENS = ["图片1", "图片2", "图片3"]
+IMAGE2_CANONICAL = (
+    "图片2是蘑菇TUTU的手和脚参考图，"
+    "身体两侧的短手和下方的短腿末端都按图片2的毛绒粉色小手小脚来画，"
+    "不要长手指不要长爪子，也不准是圆柱形肉垫。"
+)
+
+
+def normalize_image2_sentence(text: str) -> str:
+    """把模型生成的"图片2是X款蘑菇TUTU的手和脚参考图..."一整句替换为规范版本。"""
+    # 匹配从"图片2是"开始到第一个"。"为止的整句
+    pattern = re.compile(r"图片2是[^。]*?手和脚[^。]*?。")
+    return pattern.sub(IMAGE2_CANONICAL, text, count=1)
+
+
+AUDIO_BAN_SENTENCE = "禁止背景音乐，只能有环境声和蘑菇TUTU 的声音。"
+
+
+def ensure_audio_ban(text: str) -> str:
+    """音效段如果没写禁 BGM 那句硬指令，自动补在末尾。"""
+    paragraphs = text.split("\n\n")
+    for i, p in enumerate(paragraphs):
+        stripped = p.lstrip()
+        if not stripped.startswith("音效："):
+            continue
+        # 已经包含禁背景音乐指令就跳过
+        if "禁止背景音乐" in p:
+            return text
+        # 否则在段末追加
+        p = p.rstrip()
+        if not p.endswith(("。", "！", "？", ".", "!", "?")):
+            p = p + "。"
+        paragraphs[i] = p + AUDIO_BAN_SENTENCE
+        return "\n\n".join(paragraphs)
+    return text
+
+
+REQUIRED_SECTION_TAGS = ["风格：", "镜头：", "场景：", "音效：", "约束："]
+REQUIRED_IMAGE_TOKENS = ["图片1", "图片2", "图片3", "图片4"]
 
 
 def validate_prompt_shape(prompt: str) -> list[str]:
@@ -238,9 +342,13 @@ def call_gemini(system_prompt: str, user_prompt: str, timeout: int) -> str:
 
 def build_user_prompt(blueprint: dict[str, Any]) -> str:
     context = blueprint.get("context") or {}
+    sku_name = blueprint.get("sku_name", "")
+    sku_full_phrase = blueprint.get("sku_full_phrase", "")
     payload = {
         "index": blueprint.get("index"),
         "sku_index": blueprint.get("sku_index"),
+        "sku_name": sku_name,
+        "sku_full_phrase": sku_full_phrase,
         "context": {
             "context_id": blueprint.get("context_id"),
             "slot": context.get("slot"),
@@ -257,9 +365,15 @@ def build_user_prompt(blueprint: dict[str, Any]) -> str:
     }
     return (
         "请把下面这条 A1 context 改写成一条 5 秒 Seedance 文生视频 prompt。"
-        "整段视频是一个连续镜头，不允许切镜；尺度通过周围物体与蘑菇TUTU 的具体大小对比来锁定；"
-        "三张参考图分别是：图片1 蘑菇TUTU 四视图（SKU 编号见 sku_index），图片2 手和脚参考图，图片3 嘴巴参考图。"
-        "请严格按 system prompt 的段落格式输出（首段图片关系 + 风格 + 镜头 + 场景 + 配乐/音效 + 约束）。"
+        "**音效段必须用'音效：'（不是'配乐：'）开头，只写真实环境声 + 蘑菇TUTU 的可爱拟声反应**，"
+        "**且音效段最后一句必须原样写：'禁止背景音乐，只能有环境声和蘑菇TUTU 的声音。'**——这是给 Seedance 看的硬指令，不能省略或改写；"
+        "整段视频是一个连续镜头，绝对不允许切镜、跳切、换机位；"
+        f"尺度通过周围物体与{sku_name}蘑菇TUTU 的具体大小对比来锁定；"
+        "**四张参考图**分别是：图片1 蘑菇TUTU 四视图（SKU 编号见 sku_index），图片2 手和脚参考图，图片3 表情参考图，**图片4 背面/屁股参考图（显示蘑菇TUTU 没有尾巴）**。"
+        f"**首段必须把 sku_full_phrase（{sku_full_phrase}）原样拼到'图片1是蘑菇TUTU的四视图，'之后，且必须显式声明四张图片（图片1/图片2/图片3/图片4），其中图片4 必须明确说出'{sku_name}蘑菇TUTU 不能有尾巴'。**"
+        f"**整段 prompt 里只要写'蘑菇TUTU'或'蘑菇'，前面必须带上 sku_name（{sku_name}），如'{sku_name}蘑菇TUTU'。**"
+        "**整段 prompt 禁止出现任何关于尾巴的正向描写（尾根/尾椎/小尾巴/尾巴翘起/尾巴摆动/甩尾等），尾部只能以'无尾巴/没有尾巴/不长尾巴'形式出现。**"
+        "请严格按 system prompt 的段落格式输出（首段图片关系 + 风格 + 镜头 + 场景 + 音效 + 约束）。"
         "只输出 prompt 文本，不要解释，不要 JSON。\n\n"
         f"```json\n{json.dumps(payload, ensure_ascii=False, indent=2)}\n```"
     )

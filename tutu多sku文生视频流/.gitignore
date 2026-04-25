@@ -1,6 +1,6 @@
-outputs/
+﻿outputs/
 __pycache__/
 *.pyc
 .DS_Store
-sku_orig/
-push_to_github.ps1
+ABC对齐*.md
+50条完整样本.md

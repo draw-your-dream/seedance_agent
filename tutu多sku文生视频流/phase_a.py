@@ -26,7 +26,7 @@ PHASE_A_POOL_SUBPROMPTS_PATH = PIPELINE_DIR / "phase_a_pool_subprompts.md"
 GEMINI_API_KEY = os.environ.get("PICAA_API_KEY") or os.environ.get("GEMINI_API_KEY") or "Nmqoo7UOx2z4PW6X7oNkUb8WRCZrDvwB"
 GEMINI_URL = os.environ.get(
     "GEMINI_URL",
-    "https://ai.ssnai.com/gemini/v1beta/models/gemini-2.0-flash:generateContent",
+    "https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent",
 )
 
 TIME_SLOTS = [
@@ -352,7 +352,10 @@ def simulate_fused_context_blueprints(run_label: str, count: int, seed: int) -> 
     return contexts
 
 
-def build_context_generation_prompts(blueprint_batch: list[dict[str, Any]]) -> tuple[str, str]:
+def build_context_generation_prompts(
+    blueprint_batch: list[dict[str, Any]],
+    previous_themes: list[str] | None = None,
+) -> tuple[str, str]:
     personality = load_text(PERSONALITY_PATH)
     constitution = load_text(CONSTITUTION_PATH)
     system_prompt = (
@@ -360,13 +363,46 @@ def build_context_generation_prompts(blueprint_batch: list[dict[str, Any]]) -> t
         .replace("{personality}", personality)
         .replace("{constitution}", constitution)
     )
+    history_block = ""
+    if previous_themes:
+        # 取最近 80 条作为反例（兼顾上下文长度），太长容易让 Gemini 忽略
+        recent = previous_themes[-80:]
+        history_block = (
+            "**已生成过的 action_theme 历史（反例，本次输出严禁与下面任何一条在主动词或互动物体上重复）**：\n"
+            + "\n".join(f"- {t}" for t in recent)
+            + "\n\n"
+        )
     user_prompt = (
+        f"{history_block}"
         "请根据以下蓝图，生成同数量的 context：\n"
         "```json\n"
         f"{json.dumps(blueprint_batch, ensure_ascii=False, indent=2)}\n"
         "```\n"
     )
     return system_prompt, user_prompt
+
+
+def load_history_action_themes() -> list[str]:
+    """扫历史 phase_a 输出，收集所有曾经生成过的 action_theme，作为防重复反例。"""
+    out: list[str] = []
+    seen: set[str] = set()
+    phase_a_root = OUTPUT_DIR / "phase_a"
+    if not phase_a_root.exists():
+        return out
+    for path in sorted(phase_a_root.glob("*/phase_a_contexts.jsonl"), key=lambda p: p.stat().st_mtime):
+        try:
+            for line in path.read_text(encoding="utf-8-sig").splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                rec = json.loads(line)
+                theme = str(rec.get("action_theme", "")).strip()
+                if theme and theme not in seen:
+                    seen.add(theme)
+                    out.append(theme)
+        except Exception:
+            continue
+    return out
 
 
 def validate_context(context: dict[str, Any]) -> None:
@@ -397,8 +433,12 @@ def validate_context(context: dict[str, Any]) -> None:
 
 def generate_contexts_with_gemini(blueprints: list[dict[str, Any]], batch_size: int) -> list[dict[str, Any]]:
     all_contexts: list[dict[str, Any]] = []
+    history_themes = load_history_action_themes()
+    print(f"[phase-a] loaded {len(history_themes)} history action_themes as anti-repetition examples", flush=True)
     for batch in chunks(blueprints, batch_size):
-        system_prompt, user_prompt = build_context_generation_prompts(batch)
+        # 把历史 + 本轮已生成的合在一起作为反例
+        seen_themes = list(history_themes) + [c.get("action_theme", "") for c in all_contexts]
+        system_prompt, user_prompt = build_context_generation_prompts(batch, previous_themes=seen_themes)
         raw = call_gemini(system_prompt, user_prompt)
         parsed = parse_json_block(raw, default=[])
         if not isinstance(parsed, list):
