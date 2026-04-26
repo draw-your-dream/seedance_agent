@@ -35,8 +35,11 @@ START_SEED = 20260701  # 错开种子避开历史 night0X
 LABEL_PREFIX = "ext"  # ext01 - ext05
 
 env = os.environ.copy()
-env["GEMINI_API_KEY"] = "AIzaSyAufSuYD4VKs_ki1351JdyT816gZYlUqN4"
-env["ARK_API_KEY"] = "ea0b480a-411d-4f9f-bb25-b3cca83d0a27"
+# 必须在外部设置好这两个 key 再运行；不要在代码里写硬编码 secret（会推到 public repo 造成泄露）
+if not env.get("GEMINI_API_KEY"):
+    raise RuntimeError("请先设置环境变量 GEMINI_API_KEY 再运行此脚本")
+if not env.get("ARK_API_KEY"):
+    raise RuntimeError("请先设置环境变量 ARK_API_KEY 再运行此脚本")
 env.pop("GEMINI_URL", None)
 
 
