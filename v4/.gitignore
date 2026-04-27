@@ -1,0 +1,7 @@
+outputs/
+__pycache__/
+*.log
+ABC对齐_*.md
+sku_orig/
+.env
+*.key
