@@ -4,6 +4,7 @@
 import json
 import base64
 import logging
+import re
 from pathlib import Path
 
 import httpx
@@ -17,6 +18,7 @@ from tutu_core.config import (
     REF_IMAGE, REF_IMAGE_ORIGINAL,
     REF_HAND_CLOSEUP, REF_MOUTH_SIDE, REF_BACK, REF_FULL_BODY,
     REF_EXPRESSION_FILES, EXPRESSION_KEYWORDS,
+    REF_SCENE_FILES,
     REQUIRED_PREFIX, PROMPT_MIN_LENGTH,
     PROMPT_ARCHIVE_DIR,
 )
@@ -97,25 +99,53 @@ def match_expressions(prompt_text: str) -> list[str]:
 
 _EXPR_BASE_INDEX = 6  # 图片 1-5 是固定图，表情图从图片6 开始
 
+# 场景占位符 {scene:KEY} —— 与表情占位符 {happy} 平行的机制，
+# 但只走显式占位符（不做关键词扫描），避免家居词如"沙发/床"误触发现有 collection prompt
+_SCENE_PLACEHOLDER_RE = re.compile(r'\{scene:([a-z_]+)\}')
 
-def resolve_expression_placeholders(prompt_text: str, matched_order: list[str]) -> str:
-    """把 prompt 里的 `{emotion}` 占位符按 matched 顺序替换成对应的 `图片N`。
 
-    替换多种变体：
-      `{happy}情绪图片` / `{happy}表情图片` / `{happy}情绪图` / `{happy}表情图` / `{happy}`
-    未被匹配到（matched_order 里没有）的占位符保持不变（caller 可以作为校验信号）。
+def match_scenes(prompt_text: str) -> list[str]:
+    """从 prompt 里扫 `{scene:KEY}` 占位符。返回按 REF_SCENE_FILES 声明顺序的 key 列表。"""
+    found = set(_SCENE_PLACEHOLDER_RE.findall(prompt_text))
+    return [k for k in REF_SCENE_FILES if k in found]
+
+
+def resolve_expression_placeholders(
+    prompt_text: str,
+    matched_order: list[str],
+    matched_scenes: list[str] | None = None,
+    scene_base_index: int | None = None,
+) -> str:
+    """把 prompt 里的占位符替换成对应的"图片N"。
+
+    - 表情占位符 `{happy}` / `{cry}` ... 替换为图片6/7/...（按 matched_order 顺序）
+    - 场景占位符 `{scene:bedroom}` / `{scene:entrance}` ... 替换为表情之后的编号
+
+    matched_scenes 留 None 时不处理场景占位符（向后兼容只用表情的旧调用方）。
     """
     for idx, expr_key in enumerate(matched_order):
         img_num = _EXPR_BASE_INDEX + idx
         for suffix in ("情绪图片", "表情图片", "情绪图", "表情图", "情绪参考", "表情参考", ""):
             prompt_text = prompt_text.replace(f"{{{expr_key}}}{suffix}", f"图片{img_num}")
+
+    if matched_scenes:
+        base = (
+            scene_base_index
+            if scene_base_index is not None
+            else _EXPR_BASE_INDEX + len(matched_order)
+        )
+        for idx, sc in enumerate(matched_scenes):
+            img_num = base + idx
+            for suffix in ("场景图片", "场景参考图", "场景图", "场景参考", "参考图", "参考", ""):
+                prompt_text = prompt_text.replace(f"{{scene:{sc}}}{suffix}", f"图片{img_num}")
     return prompt_text
 
 
 def load_reference_images_for_prompt(prompt_text: str) -> tuple[list[str], list[str]]:
-    """根据 prompt 动态选择参考图：固定4张 + 匹配到的表情图。
+    """根据 prompt 动态选择参考图：固定5张 + 匹配到的表情图 + 匹配到的场景图。
 
     返回 (base64_list, labels)。labels 供日志/调试用。
+    顺序：固定5张 → expression 图（按 match_expressions 顺序）→ scene 图（按 match_scenes 顺序）
     """
     images = load_all_reference_images()
     labels = ["主参考图", "手部特写", "张嘴侧面", "屁股特写", "全身正面"][:len(images)]
@@ -127,6 +157,14 @@ def load_reference_images_for_prompt(prompt_text: str) -> tuple[list[str], list[
                 images.append(base64.b64encode(f.read()).decode())
             labels.append(f"表情:{expr_key}")
             logger.info(f"表情参考图已加载: {expr_key} ({path.name})")
+
+    for sc_key in match_scenes(prompt_text):
+        path = REF_SCENE_FILES.get(sc_key)
+        if path and path.exists():
+            with open(path, "rb") as f:
+                images.append(base64.b64encode(f.read()).decode())
+            labels.append(f"场景:{sc_key}")
+            logger.info(f"场景参考图已加载: {sc_key} ({path.name})")
     return images, labels
 
 
@@ -143,11 +181,21 @@ _EXPRESSION_ZH = {
     "angry": "生气奶凶",
 }
 
+# 场景 key → 中文显示名（与 REF_SCENE_FILES 同 key）
+_SCENE_ZH = {
+    "bedroom":         "蘑菇卧室（圆床+唱片机+绿色矮柜）",
+    "living_bedroom":  "客厅+卧室（粉色沙发+橙色台灯+Monday日历）",
+    "game_dressing":   "游戏室+衣帽间（开放衣架+镜子+红色瓶盖座椅）",
+    "entrance":        "玄关（拱形木门+玄关矮柜+羊皮地毯）",
+}
+
 
 def build_image_declaration(prompt_text: str) -> tuple[str, list[str]]:
     """根据 prompt 内容构建"图片1是...图片2是...图片N是..."完整声明段。
 
     返回 (declaration_sentence, expression_keys)。
+    expression_keys 仅包含表情 key（向后兼容）；场景图同样会进 declaration 但不在
+    返回值里，调用方可自己 match_scenes(prompt) 拿场景列表。
     """
     parts = [
         "图片1是小蘑菇角色形象参考",
@@ -160,7 +208,13 @@ def build_image_declaration(prompt_text: str) -> tuple[str, list[str]]:
     for i, expr in enumerate(matched):
         zh = _EXPRESSION_ZH.get(expr, expr)
         parts.append(f"图片{6 + i}是「{zh}」表情参考")
-    declaration = "。".join(parts) + "。描述动作或表情时可以显式引用对应图片。"
+    scenes = match_scenes(prompt_text)
+    scene_base = 6 + len(matched)
+    for i, sc in enumerate(scenes):
+        zh = _SCENE_ZH.get(sc, sc)
+        parts.append(f"图片{scene_base + i}是「{zh}」场景参考")
+    suffix_hint = "动作/表情" + ("/场景" if scenes else "")
+    declaration = "。".join(parts) + f"。描述{suffix_hint}时可以显式引用对应图片。"
     return declaration, matched
 
 
@@ -259,12 +313,16 @@ def submit_task(prompt_text: str, img_b64: str | list[str],
     # 注入策略：传了多张图时才注入，单图无需
     n_imgs = len(img_b64) if isinstance(img_b64, list) else 1
     if n_imgs > 1:
-        # 1. 先根据 prompt 文本确定表情图匹配顺序
+        # 1. 先根据 prompt 文本确定表情/场景图匹配顺序（同时识别关键词 + {placeholder}）
         matched = match_expressions(prompt_text)
-        # 2. 把 {happy}/{cry}/... 占位符替换成图片编号
-        prompt_text = resolve_expression_placeholders(prompt_text, matched)
-        # 3. 最后注入"图片1是...图片N是..."完整声明
+        scenes = match_scenes(prompt_text)
+        # 2. 在替换占位符之前先注入声明 —— inject_image_declaration 内部会再次
+        #    match_expressions/match_scenes，必须在占位符还在的时候跑；否则像
+        #    "{happy}+正文写'兴奋'"（"兴奋"不在 happy 关键词表）这种语境会漏匹配，
+        #    声明里就会少一行参考图并和实际加载的图错位。
         prompt_text = inject_image_declaration(prompt_text)
+        # 3. 最后把 {happy}/{cry}/{scene:bedroom}/... 占位符替换成图片编号
+        prompt_text = resolve_expression_placeholders(prompt_text, matched, scenes)
     payload = build_payload(prompt_text, img_b64, duration, video_b64=video_b64)
 
     # 提交前验证

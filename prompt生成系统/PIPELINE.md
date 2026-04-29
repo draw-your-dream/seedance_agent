@@ -73,11 +73,11 @@
 
 | 编号 | 用途 | 文件 |
 |------|------|------|
-| 图片1 | 主参考图（角色形象） | `ref/processed/reference.jpg` |
-| 图片2 | 肢体末端特写（圆形无爪子） | `ref/processed/hand_closeup.jpg` |
-| 图片3 | 张嘴表情（嘴内黑色） | `ref/processed/mouth_closeup.jpg` |
-| 图片4 | 屁股特写 | `ref/processed/back.jpg` |
-| 图片5 | 全身比例参考 | `ref/processed/full_body.jpg` |
+| 图片1 | 主参考图（角色形象） | `ref/processed/ip/reference.jpg` |
+| 图片2 | 肢体末端特写（圆形无爪子） | `ref/processed/ip/hand_closeup.jpg` |
+| 图片3 | 张嘴表情（嘴内黑色） | `ref/processed/ip/mouth_closeup.jpg` |
+| 图片4 | 屁股特写 | `ref/processed/ip/back.jpg` |
+| 图片5 | 全身比例参考 | `ref/processed/ip/full_body.jpg` |
 
 ### 2.2 条件 5 张（按 prompt 内容动态选）
 

@@ -46,13 +46,14 @@ PROJECT_ROOT = Path(__file__).parent.parent
 REF_IMAGE_ORIGINAL = PROJECT_ROOT / "reference.png"
 REF_DIR = PROJECT_ROOT / "ref"
 REF_PROCESSED_DIR = REF_DIR / "processed"
-REF_IMAGE = REF_PROCESSED_DIR / "reference.jpg"  # 压缩版 (59KB)，原图 1.7MB
+REF_IP_DIR = REF_PROCESSED_DIR / "ip"   # IP 角色固定 5 张参考图所在目录
+REF_IMAGE = REF_IP_DIR / "reference.jpg"  # 压缩版 (59KB)，原图 1.7MB
 
 # 额外参考图（预处理后：裁切+缩放+压缩，长边≤1024px）
-REF_HAND_CLOSEUP = REF_PROCESSED_DIR / "hand_closeup.jpg"    # 手部特写：圆形肢体末端无爪子 (65KB)
-REF_MOUTH_SIDE = REF_PROCESSED_DIR / "mouth_closeup.jpg"     # 张嘴脸部裁切 (95KB)
-REF_BACK = REF_PROCESSED_DIR / "back.jpg"                    # 屁股特写 (106KB)
-REF_FULL_BODY = REF_PROCESSED_DIR / "full_body.jpg"          # 全身正面 (22KB)
+REF_HAND_CLOSEUP = REF_IP_DIR / "hand_closeup.jpg"    # 手部特写：圆形肢体末端无爪子 (65KB)
+REF_MOUTH_SIDE = REF_IP_DIR / "mouth_closeup.jpg"     # 张嘴脸部裁切 (95KB)
+REF_BACK = REF_IP_DIR / "back.jpg"                    # 屁股特写 (106KB)
+REF_FULL_BODY = REF_IP_DIR / "full_body.jpg"          # 全身正面 (22KB)
 
 # 表情参考图（按需注入，prompt 含相关关键词时才附加）
 REF_EXPRESSIONS_DIR = REF_PROCESSED_DIR / "expressions"
@@ -62,6 +63,16 @@ REF_EXPRESSION_FILES = {
     "cry":   REF_EXPRESSIONS_DIR / "cry.jpg",
     "shy":   REF_EXPRESSIONS_DIR / "shy.jpg",
     "angry": REF_EXPRESSIONS_DIR / "angry.jpg",
+}
+
+# 场景参考图（家具陈设环境图，按主题选用，配合 IP 图一起喂给 Seedance）
+# 由 ref/raw/scene/*.jpg 4K 原图降到 1024 长边（与 IP 图同量级，约 50-70KB）
+REF_SCENE_DIR = REF_PROCESSED_DIR / "scene"
+REF_SCENE_FILES = {
+    "bedroom":         REF_SCENE_DIR / "卧室.jpg",
+    "living_bedroom":  REF_SCENE_DIR / "客厅+卧室.jpg",
+    "game_dressing":   REF_SCENE_DIR / "游戏室&衣帽间.jpg",
+    "entrance":        REF_SCENE_DIR / "玄关.jpg",
 }
 
 # 表情关键词映射：在 prompt 中出现任一关键词即触发对应表情参考图
